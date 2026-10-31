@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { appService, runService } from "utils/services/api_services/agentreplay_service";
 import { getErrorMessage } from "utils/services/api_services/apiClient";
 import { showToast } from "utils/store/toastStore";
-import { RunFilters } from "utils/types";
+import { ForkInput, RunFilters } from "utils/types";
 
 // React Query hooks, one per screen need. Mutations refresh every list they can change,
 // so screens never show stale state after a key is created or revoked.
@@ -12,6 +12,7 @@ export const queryKeys = {
   runs: (filters: RunFilters, page: number) => ["runs", filters, page] as const,
   run: (id: string) => ["run", id] as const,
   step: (id: string, index: number) => ["step", id, index] as const,
+  comparison: (id: string) => ["comparison", id] as const,
 };
 
 // Runs arrive from apps at any time, so what is on screen refreshes itself.
@@ -78,6 +79,26 @@ export function useStepDetail(id: string, index: number | null) {
     queryKey: queryKeys.step(id, index ?? -1),
     queryFn: () => runService.step(id, index as number).then((response) => response.data),
     enabled: index !== null,
+    staleTime: Infinity,
+  });
+}
+
+// ---------- forks ----------
+
+// Asks the AI model, so it can take a few seconds. The new fork is a new run, so the runs list is refreshed.
+export function useForkRun(runId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ForkInput) => runService.fork(runId, input).then((response) => response.data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["runs"] }),
+  });
+}
+
+// A fork and its original never change after the fork is made, so the comparison is fetched once.
+export function useComparison(forkId: string) {
+  return useQuery({
+    queryKey: queryKeys.comparison(forkId),
+    queryFn: () => runService.compare(forkId).then((response) => response.data),
     staleTime: Infinity,
   });
 }

@@ -1,14 +1,12 @@
 import { AnyBulkWriteOperation, Types } from "mongoose";
-import { MAX_STEP_ERROR_BYTES, UNTITLED_RUN_NAME } from "../../constants";
-import { TooManyRequestsError } from "../../helpers/errors";
+import { EXTERNAL_REF_ID_MAX, MAX_STEP_ERROR_BYTES, UNTITLED_RUN_NAME } from "../../constants";
 import { AppDoc } from "../../models/app.model";
 import { Run } from "../../models/run.model";
 import { Step } from "../../models/step.model";
-import { Workspace } from "../../models/workspace.model";
 import { isDuplicateKeyError } from "../../utils/mongoErrors";
 import { prepareText } from "../../utils/text";
 import { IngestBatch, IngestRun, IngestStep } from "./ingestSchemas";
-import { releaseStorage, reserveStorage } from "./storageQuota.service";
+import { assertStorageRoom, releaseStorage } from "./storageQuota.service";
 
 // Saves a batch of runs and steps sent by the SDK. Built so that batches can arrive late, out of order or twice:
 //  - runs and steps are written with upserts, so the same batch sent again changes nothing
@@ -114,6 +112,7 @@ function buildStepUpsert(runId: Types.ObjectId, step: IngestStep, text: StepText
           durationMs: step.durationMs,
           error: text.error,
           startedAt: step.startedAt ?? now,
+          ...(step.externalRef ? { externalRef: { system: step.externalRef.system, id: prepareText(step.externalRef.id, 1024).slice(0, EXTERNAL_REF_ID_MAX), url: step.externalRef.url } } : {}),
         },
       },
       upsert: true,
@@ -229,10 +228,7 @@ export async function ingestBatch(app: AppDoc, batch: IngestBatch): Promise<Inge
 
   let reservedBytes = 0;
   if (newBytes > 0) {
-    const workspace = await Workspace.findById(app.workspaceId).select("isDemo").lean();
-    const refusal = await reserveStorage(app.workspaceId, Boolean(workspace?.isDemo), newBytes, now);
-    if (refusal === "day") throw new TooManyRequestsError("This workspace has reached its storage limit for today.");
-    if (refusal === "total") throw new TooManyRequestsError("This workspace has reached its storage limit.");
+    await assertStorageRoom(app.workspaceId, newBytes, now);
     reservedBytes = newBytes;
   }
 

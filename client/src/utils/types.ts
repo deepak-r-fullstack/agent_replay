@@ -42,6 +42,15 @@ export interface SignupInput {
 // What a person sees for a run. "unfinished" is a run that says "running" but has had no update for an hour.
 export type DisplayStatus = "running" | "ok" | "failed" | "unfinished";
 export type StepType = "llm" | "tool" | "retrieval" | "custom";
+// Where a step came from: recorded by the SDK, or one of the ways a fork builds its steps.
+export type StepOrigin = "recorded" | "copied" | "rerun" | "simulated" | "edited";
+
+// A link to a record in another system, for example the AgentGuard action a step caused.
+export interface ExternalRef {
+  system: string;
+  id: string;
+  url: string;
+}
 
 export interface RunSummary {
   id: string;
@@ -88,6 +97,7 @@ export interface StepOutline {
   costUsd: number;
   durationMs: number;
   startedAt: string;
+  origin: StepOrigin;
   failed: boolean;
 }
 
@@ -100,4 +110,45 @@ export interface StepDetail extends Omit<StepOutline, "failed"> {
   input: string;
   output: string;
   error: string;
+  // The last thing an AI step was asked: the text a person changes when forking it. Null for steps that are not AI steps.
+  editablePrompt: string | null;
+  externalRef: ExternalRef | null;
+}
+
+// ---------- forks ----------
+
+export interface ForkEdit {
+  prompt?: string;
+  model?: string;
+  output?: string;
+}
+
+export interface ForkInput {
+  fromStepIndex: number;
+  edits: Record<number, ForkEdit>;
+}
+
+export interface ComparisonRow {
+  index: number;
+  type: StepType;
+  name: string;
+  origin: StepOrigin | null;
+  changed: boolean;
+  original: StepOutline | null;
+  fork: StepOutline | null;
+}
+
+export interface UndoLink {
+  index: number;
+  name: string;
+  id: string;
+  url: string;
+}
+
+export interface RunComparison {
+  original: RunSummary;
+  fork: RunSummary & { parentRunName: string };
+  forkedFromIndex: number;
+  rows: ComparisonRow[];
+  undoLinks: UndoLink[];
 }

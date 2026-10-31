@@ -1,4 +1,4 @@
-import { AgentReplay, wrapAnthropic, wrapOpenAI } from "../src";
+import { AgentReplay, SDK_VERSION, wrapAnthropic, wrapOpenAI } from "../src";
 import { FetchLike } from "../src/types";
 
 // The promise of the SDK: it can never break or slow the app it runs in.
@@ -469,5 +469,91 @@ describe("wrapAnthropic", () => {
     const [step] = allSteps(calls);
     expect(step).toMatchObject({ name: "support answer", model: "claude-haiku", tokens: 250, output: "Refund is ₹2,400." });
     expect(String(step.input)).toContain("Be kind");
+  });
+});
+
+describe("links to other systems", () => {
+  const link = { system: "agentguard", id: "act_1", url: "https://agentguard.example.com/activity/act_1" };
+
+  it("sends a link given to step() and to trace()", async () => {
+    const { fetch, calls } = recordingFetch();
+    const client = makeClient(fetch);
+    const run = client.startRun();
+    run.step({ name: "by hand", externalRef: link });
+    await run.trace("tool", "traced", async () => "ok", { externalRef: { ...link, id: "act_2", url: "https://agentguard.example.com/activity/act_2" } });
+    await client.flush();
+    const steps = allSteps(calls);
+    expect(steps[0].externalRef).toEqual(link);
+    expect(steps[1].externalRef).toEqual({ system: "agentguard", id: "act_2", url: "https://agentguard.example.com/activity/act_2" });
+  });
+
+  it("sends no link field at all when none was given", async () => {
+    const { fetch, calls } = recordingFetch();
+    const client = makeClient(fetch);
+    client.startRun().step({ name: "plain" });
+    await client.flush();
+    expect("externalRef" in allSteps(calls)[0]).toBe(false);
+  });
+
+  it.each([
+    ["an http link to another site", { ...link, url: "http://agentguard.example.com/a" }],
+    ["a javascript: link", { ...link, url: "javascript:alert(1)" }],
+    ["a link with a password", { ...link, url: "https://user:pass@example.com/a" }],
+    ["a link with a key in it", { ...link, url: "https://example.com/a?key=sk-abcdefghijklmnopqrstu" }],
+    ["a link of 501 characters", { ...link, url: `https://example.com/${"a".repeat(501 - "https://example.com/".length)}` }],
+    ["a capital letter in the system", { ...link, system: "AgentGuard" }],
+    ["an empty id", { ...link, id: "" }],
+    ["no url", { system: "agentguard", id: "x" }],
+    ["text instead of a link object", "https://agentguard.example.com/a"],
+    ["a number", 42],
+  ])("leaves out %s but still records the step, without throwing", async (_label, bad) => {
+    const { fetch, calls } = recordingFetch();
+    const client = makeClient(fetch);
+    const run = client.startRun();
+    expect(() => run.step({ name: "still here", externalRef: bad as never })).not.toThrow();
+    await expect(run.trace("tool", "traced", async () => "result", { externalRef: bad as never })).resolves.toBe("result");
+    await client.flush();
+    const steps = allSteps(calls);
+    expect(steps.map((step) => step.name)).toEqual(["still here", "traced"]);
+    expect(steps.every((step) => !("externalRef" in step))).toBe(true);
+  });
+
+  it("accepts http://localhost while developing, and refuses it in production", async () => {
+    const { fetch, calls } = recordingFetch();
+    const client = makeClient(fetch);
+    const local = { ...link, url: "http://localhost:5173/activity/act_1" };
+    client.startRun().step({ name: "dev", externalRef: local });
+    const before = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      client.startRun().step({ name: "prod", externalRef: local });
+    } finally {
+      process.env.NODE_ENV = before;
+    }
+    await client.flush();
+    const steps = allSteps(calls);
+    expect(steps.find((step) => step.name === "dev")?.externalRef).toEqual(local);
+    expect(steps.find((step) => step.name === "prod")?.externalRef).toBeUndefined();
+  });
+
+  it("accepts a link of exactly 500 characters and hides a secret that is part of the id", async () => {
+    const { fetch, calls } = recordingFetch();
+    const client = makeClient(fetch);
+    const url = `https://example.com/${"a".repeat(500 - "https://example.com/".length)}`;
+    client.startRun().step({ name: "long", externalRef: { system: "agentguard", id: "ref for ann@example.com", url } });
+    await client.flush();
+    const [step] = allSteps(calls);
+    expect((step.externalRef as { url: string }).url).toBe(url);
+    expect((step.externalRef as { id: string }).id).toBe("ref for [email hidden]");
+  });
+});
+
+describe("the published version", () => {
+  it("is the same number in the code and in package.json", () => {
+    const { readFileSync } = require("fs") as typeof import("fs");
+    const { join } = require("path") as typeof import("path");
+    const packageVersion = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf8")).version;
+    expect(SDK_VERSION).toBe(packageVersion);
+    expect(packageVersion).toBe("0.2.0");
   });
 });

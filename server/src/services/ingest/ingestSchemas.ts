@@ -1,5 +1,16 @@
 import { z } from "zod";
-import { MAX_RUNS_PER_BATCH, MAX_STEPS_PER_BATCH, MAX_STEPS_PER_RUN, RUN_STATUSES, STEP_TYPES } from "../../constants";
+import { isProduction } from "../../config/env";
+import {
+  EXTERNAL_REF_ID_MAX,
+  EXTERNAL_REF_SYSTEM_PATTERN,
+  EXTERNAL_REF_URL_MAX,
+  MAX_RUNS_PER_BATCH,
+  MAX_STEPS_PER_BATCH,
+  MAX_STEPS_PER_RUN,
+  RUN_STATUSES,
+  STEP_TYPES,
+} from "../../constants";
+import { isAllowedLinkUrl } from "../../utils/externalRef";
 
 // What the SDK may send. Unknown fields are dropped, so newer SDKs can add fields without breaking older servers.
 // Text is not length-checked here: the service cuts it to 32 KB and the request size limit bounds the rest.
@@ -24,6 +35,17 @@ export const ingestRunSchema = z.object({
   durationMs: wholeNumber.optional(),
 });
 
+// A link to a record in another system. Only safe links are accepted (see utils/externalRef.ts).
+export const externalRefSchema = z.object({
+  system: z.string().regex(EXTERNAL_REF_SYSTEM_PATTERN, "The system name must be lowercase letters, numbers, - or _."),
+  id: z.string().trim().min(1).max(EXTERNAL_REF_ID_MAX),
+  url: z
+    .string()
+    .max(EXTERNAL_REF_URL_MAX, `A link can be up to ${EXTERNAL_REF_URL_MAX} characters.`)
+    // Checked when a batch arrives, so a server running in production refuses http://localhost links.
+    .refine((url) => isAllowedLinkUrl(url, isProduction), "Links must start with https:// and must not contain a password or a secret."),
+});
+
 export const ingestStepSchema = z.object({
   runId: z.string().trim().min(1).max(64), // the SDK's id of the run this step belongs to
   index: z
@@ -41,6 +63,7 @@ export const ingestStepSchema = z.object({
   durationMs: wholeNumber.default(0),
   error: z.string().default(""),
   startedAt: isoDate.optional(),
+  externalRef: externalRefSchema.optional(),
 });
 
 export const ingestBatchSchema = z

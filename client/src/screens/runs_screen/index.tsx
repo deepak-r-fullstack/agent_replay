@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, KeyRound, Search, X } from "lucide-react";
-import { DisplayButton, DisplayEmptyState, DisplayError, DisplayLoading, DisplayPageHeader, DisplayStatusBadge, DisplayTip } from "components/display_components";
+import { DisplayBadge, DisplayButton, DisplayEmptyState, DisplayError, DisplayHelp, DisplayLoading, DisplayPageHeader, DisplayStatusBadge, DisplayTip } from "components/display_components";
 import { useApps, useRuns } from "utils/hooks/useAgentReplayQueries";
 import { useDebouncedValue } from "utils/hooks/useDebouncedValue";
 import { getErrorMessage } from "utils/services/api_services/apiClient";
-import { formatCost, formatDuration, plural, timeAgo } from "utils/helper_functions/format";
+import { formatCost, formatDuration, plural, STATUS_META, timeAgo } from "utils/helper_functions/format";
 import { DisplayStatus, RunFilters, RunSummary } from "utils/types";
 
 const STATUS_OPTIONS: Array<{ value: DisplayStatus | ""; label: string }> = [
@@ -16,6 +16,9 @@ const STATUS_OPTIONS: Array<{ value: DisplayStatus | ""; label: string }> = [
   { value: "unfinished", label: "Unfinished" },
 ];
 
+// What each status means, for the "?" next to the Status filter.
+const STATUS_EXPLAINED = (["ok", "failed", "running", "unfinished"] as const).map((status) => `${STATUS_META[status].label}: ${STATUS_META[status].hint}`).join("\n");
+
 // The same grid for the header and every row, so the columns line up on wide screens.
 const ROW_GRID = "md:grid md:grid-cols-[minmax(0,2.4fr)_100px_minmax(0,1.2fr)_64px_84px_84px_96px] md:items-center md:gap-x-4";
 
@@ -25,7 +28,10 @@ const RunRow = ({ run, backTo }: { run: RunSummary; backTo: string }) => {
     <li>
       <Link to={`/runs/${run.id}`} state={{ backTo }} className={`block px-4 py-3 transition-colors hover:bg-brand-tint/40 ${ROW_GRID}`}>
         <span className="block min-w-0">
-          <span className="block truncate font-medium">{run.name}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-medium">{run.name}</span>
+            {run.parentRunId && <DisplayBadge label="Fork" />}
+          </span>
           {who && <span className="block truncate text-sm text-ink-soft">{who}</span>}
         </span>
         <span className="mt-1 block md:mt-0">
@@ -121,6 +127,7 @@ export const RunsScreen = () => {
         <div>
           <label htmlFor="runStatus" className="field-label">
             Status
+            <DisplayHelp meaning={STATUS_EXPLAINED} label="What do the statuses mean?" />
           </label>
           <select id="runStatus" className="field-input" value={filters.status || ""} onChange={(event) => change({ status: event.target.value })}>
             {STATUS_OPTIONS.map((option) => (
@@ -197,12 +204,14 @@ export const RunsScreen = () => {
       {data && data.runs.length > 0 && (
         <>
           <div className="overflow-hidden rounded-lg border border-line bg-sheet">
-            <div className={`hidden border-b border-line bg-paper px-4 py-2 text-xs font-semibold uppercase tracking-wide text-ink-faint ${ROW_GRID}`} aria-hidden>
+            <div className={`hidden border-b border-line bg-paper px-4 py-2 text-xs font-semibold uppercase tracking-wide text-ink-faint ${ROW_GRID}`}>
               <span>Run</span>
               <span>Status</span>
               <span>AI model</span>
               <span>Steps</span>
-              <span title="What the AI calls in this run cost. A dash means no cost was recorded.">Cost</span>
+              <span>
+                <DisplayTip term="Cost" meaning="What the AI calls in this run cost. A dash means no cost was recorded." />
+              </span>
               <span>Time taken</span>
               <span>Started</span>
             </div>

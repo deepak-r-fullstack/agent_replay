@@ -1,18 +1,20 @@
 import { KeyboardEvent, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Bot, CircleDot, GitFork, Hourglass, Search, Wrench } from "lucide-react";
-import { DisplayButton, DisplayError, DisplayLoading, DisplayStatusBadge } from "components/display_components";
+import { AlertTriangle, ArrowLeft, Bot, CircleDot, GitCompare, GitFork, Hourglass, Search, Wrench } from "lucide-react";
+import { DisplayButton, DisplayError, DisplayLoading, DisplayStatusBadge, DisplayTip } from "components/display_components";
 import { useRun } from "utils/hooks/useAgentReplayQueries";
 import { getErrorMessage } from "utils/services/api_services/apiClient";
-import { formatCost, formatDuration, formatTokens, plural, STEP_TYPE_META, timeAgo } from "utils/helper_functions/format";
+import { formatCost, formatDuration, formatTokens, plural, STEP_ORIGIN_META, STEP_TYPE_META, timeAgo } from "utils/helper_functions/format";
+import { useAuthStore } from "utils/store/authStore";
 import { StepOutline, StepType } from "utils/types";
+import { ForkPanel } from "./ForkPanel";
 import { StepDetailPanel } from "./StepDetailPanel";
 
 const STEP_ICON: Record<StepType, typeof Bot> = { llm: Bot, tool: Wrench, retrieval: Search, custom: CircleDot };
 
 const RunFact = ({ label, value, hint }: { label: string; value: string; hint?: string }) => (
-  <div title={hint}>
-    <dt className="text-xs text-ink-faint">{label}</dt>
+  <div>
+    <dt className="text-xs text-ink-faint">{hint ? <DisplayTip term={label} meaning={hint} /> : label}</dt>
     <dd className="text-sm font-medium">{value}</dd>
   </div>
 );
@@ -20,7 +22,9 @@ const RunFact = ({ label, value, hint }: { label: string; value: string; hint?: 
 const TimelineItem = ({ step, selected, onSelect }: { step: StepOutline; selected: boolean; onSelect: () => void }) => {
   const Icon = STEP_ICON[step.type];
   const meta = STEP_TYPE_META[step.type];
-  const facts = [meta.label, formatDuration(step.durationMs), step.tokens ? `${formatTokens(step.tokens)} tokens` : ""].filter((part) => part && part !== "—");
+  // In a fork, steps that were asked again or did not really run say so (the details explain what that means).
+  const origin = step.origin === "recorded" || step.origin === "copied" ? "" : STEP_ORIGIN_META[step.origin]?.label || "";
+  const facts = [meta.label, formatDuration(step.durationMs), step.tokens ? `${formatTokens(step.tokens)} tokens` : "", origin].filter((part) => part && part !== "—");
   return (
     <li>
       <button
@@ -64,6 +68,10 @@ export const RunReplayScreen = () => {
   const backTo = (location.state as { backTo?: string } | null)?.backTo || "/runs";
   const { data, isLoading, error, refetch } = useRun(id);
   const [chosen, setChosen] = useState<number | null>(null);
+  const [forkingFrom, setForkingFrom] = useState<number | null>(null);
+  const role = useAuthStore((state) => state.user?.role);
+  // Viewers can look at runs but cannot start forks.
+  const canFork = role === "owner" || role === "developer";
   const detailRef = useRef<HTMLDivElement>(null);
 
   const backLink = (
@@ -89,6 +97,7 @@ export const RunReplayScreen = () => {
 
   const select = (index: number, scroll = true) => {
     setChosen(index);
+    setForkingFrom(null);
     // On a phone the details sit below the timeline, so bring them into view.
     if (scroll && window.innerWidth < 1024) detailRef.current?.scrollIntoView({ block: "start" });
   };
@@ -112,7 +121,7 @@ export const RunReplayScreen = () => {
       <header className="mb-5">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="break-words text-2xl font-semibold tracking-tight">{run.name}</h1>
-          <DisplayStatusBadge status={run.displayStatus} />
+          <DisplayStatusBadge status={run.displayStatus} explain />
         </div>
         <p className="mt-1 text-ink-soft">
           Started {timeAgo(run.startedAt)}
@@ -145,6 +154,11 @@ export const RunReplayScreen = () => {
               "The run it started from is no longer available."
             )}
           </span>
+          {run.parentRunName && (
+            <Link to={`/runs/${run.id}/compare`} className="ml-auto inline-flex shrink-0 items-center gap-1.5 font-semibold text-brand underline">
+              <GitCompare className="h-4 w-4" aria-hidden /> Compare with the original
+            </Link>
+          )}
         </p>
       )}
 
@@ -190,7 +204,11 @@ export const RunReplayScreen = () => {
             </ol>
           </section>
           <section ref={detailRef} aria-label="Step details" className="min-w-0 scroll-mt-4 rounded-lg border border-line bg-sheet p-5">
-            {selected !== null && <StepDetailPanel key={selected} runId={run.id} index={selected} />}
+            {forkingFrom !== null && steps.some((step) => step.index === forkingFrom) ? (
+              <ForkPanel runId={run.id} from={steps.find((step) => step.index === forkingFrom)!} steps={steps} onCancel={() => setForkingFrom(null)} />
+            ) : (
+              selected !== null && <StepDetailPanel key={selected} runId={run.id} index={selected} onFork={canFork ? () => setForkingFrom(selected) : undefined} />
+            )}
           </section>
         </div>
       )}

@@ -8,9 +8,9 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 | --- | --- | --- |
 | 1 | Foundation: sign-up, sign-in, apps and SDK keys, CI | done |
 | 2 | SDK and ingest | done |
-| 3 | Runs list and replay screens | in review |
-| 4 | Fork and re-run | next |
-| 5 | Tests and suites | |
+| 3 | Runs list and replay screens | done |
+| 4 | Fork, fix and undo | in review |
+| 5 | Tests and suites | next |
 | 6 | Demo data, docs, deploy | |
 
 ## Milestone 3 checklist (runs list and replay screens)
@@ -23,6 +23,7 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 - Seed data that tells the refund story (wrong amount, fork at step 3, fixed, save as test).
 - README screenshots and the 3-minute demo script, `render.yaml`, SDK ready to publish.
 - **Protect the shared demo workspace.** Every demo visitor shares one workspace, so one visitor can change what the next one sees. Plan a regular demo reset, or protect the seeded items: seeded apps cannot be revoked or rotated, and some app slots stay free so visitors can always add one.
+- **Link the demo seed to AgentGuard.** The demo seed's wrong refund step links to the matching action in AgentGuard's demo (a step `externalRef` with system `agentguard`), so "Undo the original actions" works in the demo.
 - **Before deploy, add one global storage limit across all workspaces (250 MB), because new workspaces are free to create and the Atlas cluster is shared with AgentGuard.**
 - **Reset the demo's storage counters with its clean-up.** The demo workspace's all-time storage counter (`storage_usage`, day `total`) only goes up. When old demo runs are deleted, lower or reset that counter too, or the demo will stop accepting new steps after about 20 days of full use.
 
