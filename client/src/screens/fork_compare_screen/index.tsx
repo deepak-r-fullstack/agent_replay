@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ExternalLink, ShieldCheck, Undo2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, FlaskConical, ShieldCheck, Undo2 } from "lucide-react";
 import { DisplayButton, DisplayError, DisplayLoading, DisplayTip } from "components/display_components";
 import { useComparison, useStepDetail } from "utils/hooks/useAgentReplayQueries";
 import { getErrorMessage } from "utils/services/api_services/apiClient";
+import { diffWords } from "utils/helper_functions/diff";
 import { formatCost, formatDuration, formatTokens, safeLink, STEP_ORIGIN_META, STEP_TYPE_META } from "utils/helper_functions/format";
+import { useAuthStore } from "utils/store/authStore";
 import { ComparisonRow, RunSummary, UndoLink } from "utils/types";
+import { SaveAsTestDialog } from "screens/tests_screen/SaveAsTestDialog";
 import { DiffText } from "./DiffText";
 
 const Side = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -140,6 +143,32 @@ const UndoList = ({ links }: { links: UndoLink[] }) => (
   </section>
 );
 
+// Numbers and amounts (like ₹2,400) that appear in only one of the two answers: good things for a test to look for.
+function figuresIn(parts: Array<{ text: string }>) {
+  const found = parts.flatMap((part) => part.text.split(/\s+/)).map((word) => word.replace(/^[^\p{L}\p{N}₹$€£]+|[^\p{L}\p{N}]+$/gu, "")).filter((word) => /\d/.test(word));
+  return [...new Set(found)].slice(0, 3);
+}
+
+// Opens "Save as test" for the fork's answer, with checks suggested from what changed between the two answers.
+const SaveAsTestButton = ({ originalId, forkId, index, name }: { originalId: string; forkId: string; index: number; name: string }) => {
+  const { data: before } = useStepDetail(originalId, index);
+  const { data: after } = useStepDetail(forkId, index);
+  const [open, setOpen] = useState(false);
+  const suggestions = useMemo(() => {
+    if (!before || !after) return undefined;
+    const parts = diffWords(before.output, after.output);
+    return { mention: figuresIn(parts.filter((part) => part.type === "added")), avoid: figuresIn(parts.filter((part) => part.type === "removed")) };
+  }, [before, after]);
+  return (
+    <>
+      <DisplayButton onClick={() => setOpen(true)} icon={<FlaskConical className="h-4 w-4" aria-hidden />}>
+        Save as test
+      </DisplayButton>
+      {open && <SaveAsTestDialog runId={forkId} stepIndex={index} defaultName={`${name}: the fixed answer`.slice(0, 120)} suggestions={suggestions} onClose={() => setOpen(false)} />}
+    </>
+  );
+};
+
 // Which step is "the answer": the last AI step, or the last step if there is no AI step.
 function answerIndex(rows: ComparisonRow[]) {
   const ai = [...rows].reverse().find((row) => row.type === "llm" && row.original && row.fork);
@@ -157,6 +186,8 @@ export const ForkCompareScreen = () => {
   const { id = "" } = useParams();
   const { data, isLoading, error, refetch } = useComparison(id);
   const [showAll, setShowAll] = useState(false);
+  const role = useAuthStore((state) => state.user?.role);
+  const canSaveTest = role === "owner" || role === "developer";
 
   const back = (
     <Link to={`/runs/${id}`} className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-ink-soft hover:text-ink">
@@ -189,13 +220,7 @@ export const ForkCompareScreen = () => {
             <RunLine run={original} label={original.name} /> is what the app really did. <RunLine run={fork} label="The fork" /> is the same run with your change. Words that differ are marked.
           </p>
         </div>
-        <div className="flex flex-col items-start gap-1">
-          {/* Saving a run as a test arrives in the next milestone. */}
-          <DisplayButton disabled aria-disabled="true">
-            Save as test
-          </DisplayButton>
-          <span className="text-xs text-ink-faint">Coming soon</span>
-        </div>
+        {canSaveTest && finalRow?.type === "llm" && finalIndex !== null && <SaveAsTestButton originalId={original.id} forkId={fork.id} index={finalIndex} name={original.name} />}
       </header>
 
       <p className="mb-2 flex items-start gap-2 rounded-lg border border-done/30 bg-done-tint px-4 py-3 text-sm text-done" role="note">

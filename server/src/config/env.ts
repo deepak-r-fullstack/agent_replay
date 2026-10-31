@@ -28,6 +28,10 @@ const envSchema = z.object({
   // Which AI model forks re-run through. "demo" is a free scripted model that needs no key, so the site works with none.
   LLM_PROVIDER: z.enum(["demo", "openai", "anthropic", "ollama"]).default("demo"),
   LLM_MODEL: z.string().optional().default(""),
+  // What the AI provider charges, in US dollars per million tokens. Used to work out what each fork and test run cost.
+  // 0 means "not known": costs then show as a dash and "cost under" checks cannot fail.
+  LLM_INPUT_PRICE_PER_MILLION: z.coerce.number().min(0).default(0),
+  LLM_OUTPUT_PRICE_PER_MILLION: z.coerce.number().min(0).default(0),
   // The only models a fork may ask for (comma-separated). Any other model is replaced by LLM_MODEL.
   // Empty means only LLM_MODEL is allowed. Not used by the free demo model.
   LLM_ALLOWED_MODELS: z.string().optional().default("").transform(parseModelList),

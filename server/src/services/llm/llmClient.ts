@@ -1,7 +1,7 @@
 import { env } from "../../config/env";
 import { AI_CALL_TIMEOUT_MS, MAX_ANSWER_TOKENS } from "../../constants";
 import { ServiceUnavailableError } from "../../helpers/errors";
-import { demoReply } from "./demoProvider";
+import { DEMO_MODELS, demoReply } from "./demoProvider";
 
 // ---------------------------------------------------------------------------
 // One tiny, provider-agnostic way to ask a model a question. No SDKs: plain fetch,
@@ -26,6 +26,7 @@ export interface ChatResult {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  costUsd?: number; // from the prices in the settings; 0 or missing when not known
 }
 
 const DEFAULT_MODELS: Record<string, string> = {
@@ -55,6 +56,16 @@ export function isLlmConfigured(): boolean {
 // The model used when nobody asked for one, or when the one asked for is not allowed.
 function fallbackModel() {
   return env.LLM_MODEL || DEFAULT_MODELS[env.LLM_PROVIDER];
+}
+
+/** The models someone can pick from: the free demo models, or the allowed models of the paid provider. */
+export function modelChoices(forceDemo = false): string[] {
+  return usesDemoProvider(forceDemo) ? [...DEMO_MODELS] : allowedModels();
+}
+
+/** The model used when none is picked. */
+export function defaultModel(forceDemo = false): string {
+  return usesDemoProvider(forceDemo) ? DEFAULT_MODELS.demo : fallbackModel();
 }
 
 /** The models a fork may use with a paid provider: the ones on LLM_ALLOWED_MODELS, plus LLM_MODEL itself. */
@@ -116,6 +127,11 @@ function requireText(text: unknown): string {
   return answer;
 }
 
+// Works out the cost from the prices in the settings (US dollars per million tokens). 0 when they are not set.
+function costOf(inputTokens: number, outputTokens: number) {
+  return (inputTokens * env.LLM_INPUT_PRICE_PER_MILLION + outputTokens * env.LLM_OUTPUT_PRICE_PER_MILLION) / 1_000_000;
+}
+
 function count(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
 }
@@ -129,7 +145,7 @@ export async function completeChat(request: ChatRequest, options: ChatOptions = 
   if (usesDemoProvider(options.forceDemo)) {
     const model = resolveModel(request.model, true).model;
     const everything = [request.system || "", ...request.messages.map((message) => message.content)].join("\n");
-    const text = demoReply(everything);
+    const text = demoReply(everything, model);
     return { text, model, inputTokens: estimateTokens(everything), outputTokens: estimateTokens(text) };
   }
 
@@ -153,12 +169,9 @@ export async function completeChat(request: ChatRequest, options: ChatOptions = 
       },
       timeoutMs
     );
-    return {
-      text: requireText(data?.choices?.[0]?.message?.content),
-      model: String(data?.model || model),
-      inputTokens: count(data?.usage?.prompt_tokens),
-      outputTokens: count(data?.usage?.completion_tokens),
-    };
+    const inputTokens = count(data?.usage?.prompt_tokens);
+    const outputTokens = count(data?.usage?.completion_tokens);
+    return { text: requireText(data?.choices?.[0]?.message?.content), model: String(data?.model || model), inputTokens, outputTokens, costUsd: costOf(inputTokens, outputTokens) };
   }
 
   if (env.LLM_PROVIDER === "anthropic") {
@@ -168,11 +181,14 @@ export async function completeChat(request: ChatRequest, options: ChatOptions = 
       { model, max_tokens: MAX_ANSWER_TOKENS, temperature: 0, ...(request.system ? { system: request.system } : {}), messages: request.messages },
       timeoutMs
     );
+    const inputTokens = count(data?.usage?.input_tokens);
+    const outputTokens = count(data?.usage?.output_tokens);
     return {
       text: requireText((data?.content || []).map((part: { text?: string }) => part.text || "").join("")),
       model: String(data?.model || model),
-      inputTokens: count(data?.usage?.input_tokens),
-      outputTokens: count(data?.usage?.output_tokens),
+      inputTokens,
+      outputTokens,
+      costUsd: costOf(inputTokens, outputTokens),
     };
   }
 
@@ -189,10 +205,7 @@ export async function completeChat(request: ChatRequest, options: ChatOptions = 
     },
     timeoutMs
   );
-  return {
-    text: requireText(data?.message?.content),
-    model: String(data?.model || model),
-    inputTokens: count(data?.prompt_eval_count),
-    outputTokens: count(data?.eval_count),
-  };
+  const inputTokens = count(data?.prompt_eval_count);
+  const outputTokens = count(data?.eval_count);
+  return { text: requireText(data?.message?.content), model: String(data?.model || model), inputTokens, outputTokens, costUsd: costOf(inputTokens, outputTokens) };
 }

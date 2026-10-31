@@ -1,4 +1,4 @@
-import { Check, Copy, ExternalLink, GitFork } from "lucide-react";
+import { Check, Copy, ExternalLink, FlaskConical, GitFork } from "lucide-react";
 import { useState } from "react";
 import { DisplayButton, DisplayError, DisplayLoading, DisplayTip } from "components/display_components";
 import { useStepDetail } from "utils/hooks/useAgentReplayQueries";
@@ -64,7 +64,7 @@ export const Fact = ({ label, value, hint }: { label: string; value: string; hin
 const systemName = (system: string) => (system === "agentguard" ? "AgentGuard" : system);
 
 // What went into one step and what came out, with its time, tokens and cost.
-export const StepDetailPanel = ({ runId, index, onFork }: { runId: string; index: number; onFork?: () => void }) => {
+export const StepDetailPanel = ({ runId, index, onFork, onSaveAsTest }: { runId: string; index: number; onFork?: () => void; onSaveAsTest?: () => void }) => {
   const { data: step, isLoading, error, refetch } = useStepDetail(runId, index);
 
   if (isLoading) return <DisplayLoading label="Loading this step" />;
@@ -82,11 +82,18 @@ export const StepDetailPanel = ({ runId, index, onFork }: { runId: string; index
           </p>
           <h2 className="mt-0.5 break-words text-xl font-semibold">{step.name || "Untitled step"}</h2>
         </div>
-        {onFork && (
-          <DisplayButton onClick={onFork} icon={<GitFork className="h-4 w-4" aria-hidden />}>
-            Fork from this step
-          </DisplayButton>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {onSaveAsTest && step.type === "llm" && (
+            <DisplayButton onClick={onSaveAsTest} icon={<FlaskConical className="h-4 w-4" aria-hidden />}>
+              Save as test
+            </DisplayButton>
+          )}
+          {onFork && (
+            <DisplayButton onClick={onFork} icon={<GitFork className="h-4 w-4" aria-hidden />}>
+              Fork from this step
+            </DisplayButton>
+          )}
+        </div>
       </div>
 
       <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">

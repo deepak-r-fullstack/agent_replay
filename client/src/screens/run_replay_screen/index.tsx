@@ -7,6 +7,7 @@ import { getErrorMessage } from "utils/services/api_services/apiClient";
 import { formatCost, formatDuration, formatTokens, plural, STEP_ORIGIN_META, STEP_TYPE_META, timeAgo } from "utils/helper_functions/format";
 import { useAuthStore } from "utils/store/authStore";
 import { StepOutline, StepType } from "utils/types";
+import { SaveAsTestDialog } from "screens/tests_screen/SaveAsTestDialog";
 import { ForkPanel } from "./ForkPanel";
 import { StepDetailPanel } from "./StepDetailPanel";
 
@@ -69,6 +70,7 @@ export const RunReplayScreen = () => {
   const { data, isLoading, error, refetch } = useRun(id);
   const [chosen, setChosen] = useState<number | null>(null);
   const [forkingFrom, setForkingFrom] = useState<number | null>(null);
+  const [savingTestFor, setSavingTestFor] = useState<number | null>(null);
   const role = useAuthStore((state) => state.user?.role);
   // Viewers can look at runs but cannot start forks.
   const canFork = role === "owner" || role === "developer";
@@ -207,11 +209,13 @@ export const RunReplayScreen = () => {
             {forkingFrom !== null && steps.some((step) => step.index === forkingFrom) ? (
               <ForkPanel runId={run.id} from={steps.find((step) => step.index === forkingFrom)!} steps={steps} onCancel={() => setForkingFrom(null)} />
             ) : (
-              selected !== null && <StepDetailPanel key={selected} runId={run.id} index={selected} onFork={canFork ? () => setForkingFrom(selected) : undefined} />
+              selected !== null && <StepDetailPanel key={selected} runId={run.id} index={selected} onFork={canFork ? () => setForkingFrom(selected) : undefined} onSaveAsTest={canFork ? () => setSavingTestFor(selected) : undefined} />
             )}
           </section>
         </div>
       )}
+
+      {savingTestFor !== null && <SaveAsTestDialog runId={run.id} stepIndex={savingTestFor} defaultName={run.name} onClose={() => setSavingTestFor(null)} />}
     </>
   );
 };

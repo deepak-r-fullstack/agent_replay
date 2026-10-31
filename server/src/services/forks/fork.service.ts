@@ -126,7 +126,7 @@ async function planSteps(steps: LeanStep[], input: ForkInput, ask: Ask, forceDem
         output,
         model: answer.model || model,
         tokens: answer.inputTokens + answer.outputTokens,
-        costUsd: 0, // the AI model reports tokens, not prices
+        costUsd: answer.costUsd ?? 0, // from the prices in the settings; 0 when they are not set
         durationMs: Date.now() - started,
         startedAt: new Date(),
         error: "",

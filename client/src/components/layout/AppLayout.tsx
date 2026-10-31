@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { History, KeyRound, LogOut, Menu, PlayCircle, X } from "lucide-react";
+import { FlaskConical, History, KeyRound, LogOut, Menu, PlayCircle, X } from "lucide-react";
 import { useAuthStore } from "utils/store/authStore";
 import { ROLE_LABEL } from "utils/helper_functions/format";
 import { UserRole } from "utils/types";
@@ -12,9 +12,9 @@ interface NavItem {
   roles?: UserRole[];
 }
 
-// More screens (Tests) join this list in the next milestones.
 const NAV_ITEMS: NavItem[] = [
   { to: "/runs", label: "Runs", icon: History },
+  { to: "/tests", label: "Tests", icon: FlaskConical },
   { to: "/apps", label: "Apps and keys", icon: KeyRound },
 ];
 

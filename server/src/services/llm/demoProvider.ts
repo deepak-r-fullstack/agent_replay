@@ -18,8 +18,17 @@ const RULES: Array<{ matches: (text: string) => boolean; reply: string }> = [
   },
 ];
 
+// The two free scripted models. "demo-fast" stands for a cheaper model that is less careful: it misreads the refund
+// amount. Running all tests with it shows what a change for the worse looks like.
+export const DEMO_MODELS = ["demo-model", "demo-fast"] as const;
+
 const FALLBACK_REPLY = "This is a scripted demo answer. The built-in demo model only knows the refund story, so it cannot answer other questions.";
 
-export function demoReply(promptText: string): string {
+const FAST_MODEL_MISTAKE =
+  "Your refund for order 1042 is ₹1,800. It will reach your original payment method in 3 to 5 working days. Is there anything else I can help with?";
+
+export function demoReply(promptText: string, model = "demo-model"): string {
+  // The careless model reads order 1042's data and still says ₹1,800.
+  if (model === "demo-fast" && RULES[0].matches(promptText)) return FAST_MODEL_MISTAKE;
   return RULES.find((rule) => rule.matches(promptText))?.reply ?? FALLBACK_REPLY;
 }
