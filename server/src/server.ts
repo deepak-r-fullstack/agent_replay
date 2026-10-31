@@ -2,6 +2,7 @@
 import { env } from "./config/env";
 import { createApp } from "./app";
 import { connectToDatabase, disconnectFromDatabase } from "./loaders/database";
+import { startMaintenance } from "./loaders/maintenance";
 import { logger, serializeError } from "./utils/logger";
 
 // Unhandled rejections and uncaught exceptions: log, then exit so the platform
@@ -19,6 +20,7 @@ async function startServer() {
   try {
     await connectToDatabase();
 
+    startMaintenance();
     const app = createApp();
     const server = app.listen(env.PORT, () => {
       logger.info("server listening", { port: env.PORT, environment: env.NODE_ENV, demoMode: env.DEMO_MODE });

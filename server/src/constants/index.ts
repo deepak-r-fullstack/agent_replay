@@ -120,3 +120,9 @@ export const MAX_TEST_AI_CALLS_PER_DAY_DEMO_PROVIDER = 500;
 export const MAX_TEST_OUTPUT_BYTES = 4 * 1024; // the answer kept with a result (checks look at the whole answer)
 export const TEST_RESULT_KEEP_DAYS = 30; // old results delete themselves
 export const MAX_TEST_NAME_LENGTH = 120;
+
+// ---------- keeping the counters honest ----------
+// How often the server looks at its housekeeping jobs. Each job has its own interval, and only one server wins each run.
+export const MAINTENANCE_CHECK_EVERY_MS = 60 * 60 * 1000;
+// The daily clean-up works out each workspace's real storage total again, because deletes (old test results, demo reset) lower it.
+export const STORAGE_CLEANUP_EVERY_MS = 24 * 60 * 60 * 1000;

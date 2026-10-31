@@ -1,11 +1,12 @@
 import { Types } from "mongoose";
-import { MAX_TESTS_PER_WORKSPACE } from "../../constants";
+import { MAX_TEST_OUTPUT_BYTES, MAX_TESTS_PER_WORKSPACE } from "../../constants";
 import { BadRequestError, ConflictError, NotFoundError } from "../../helpers/errors";
 import { Run } from "../../models/run.model";
 import { Step } from "../../models/step.model";
 import { TestCase, TestCaseDoc } from "../../models/testCase.model";
 import { TestResult } from "../../models/testResult.model";
 import { isDuplicateKeyError } from "../../utils/mongoErrors";
+import { lowerStorage } from "../ingest/storageQuota.service";
 import { editablePromptOf } from "../forks/forkText";
 import { defaultModel, modelChoices } from "../llm/llmClient";
 
@@ -116,5 +117,8 @@ export async function updateTest(workspaceId: Types.ObjectId, testId: string, ch
 export async function deleteTest(workspaceId: Types.ObjectId, testId: string) {
   const test = await TestCase.findOneAndDelete({ _id: testId, workspaceId }).select("_id").lean();
   if (!test) throw new NotFoundError("That test was not found.");
+  // Each result that was asked was counted at 4 KB (a skipped test gave its share back), so the total comes down with them.
+  const counted = await TestResult.countDocuments({ testCaseId: test._id, outcome: { $ne: "skipped" } });
   await TestResult.deleteMany({ testCaseId: test._id });
+  await lowerStorage(workspaceId, counted * MAX_TEST_OUTPUT_BYTES);
 }

@@ -48,6 +48,12 @@ export async function releaseStorage(workspaceId: Types.ObjectId, bytes: number,
 }
 
 /** Reserves room for `bytes` for a workspace, or answers 429 with a friendly message. Used by everything that saves step text. */
+// Brings the all-time total down after data was deleted. It never goes below zero.
+export async function lowerStorage(workspaceId: Types.ObjectId, bytes: number) {
+  if (bytes <= 0) return;
+  await StorageUsage.updateOne({ workspaceId, day: STORAGE_TOTAL_KEY }, [{ $set: { bytes: { $max: [0, { $subtract: ["$bytes", bytes] }] } } }]);
+}
+
 export async function assertStorageRoom(workspaceId: Types.ObjectId, bytes: number, now = new Date()) {
   const workspace = await Workspace.findById(workspaceId).select("isDemo").lean();
   const refusal = await reserveStorage(workspaceId, Boolean(workspace?.isDemo), bytes, now);
