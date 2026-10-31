@@ -78,8 +78,8 @@ describe("who may look", () => {
     const team = await makeTeam("viewer");
     const run = await makeRun(team);
     await Step.create({ runId: run._id, index: 0, type: "tool", name: "look" });
-    await User.create({ workspaceId: team.workspaceId, name: "Viewer", email: "viewer@runs.test.example", role: "viewer", passwordHash: await hashPassword(PASSWORD) });
-    const login = await request(app).post("/api/auth/login").send({ email: "viewer@runs.test.example", password: PASSWORD });
+    await User.create({ workspaceId: team.workspaceId, name: "Viewer", email: "look-only@runs.test.example", role: "viewer", passwordHash: await hashPassword(PASSWORD) });
+    const login = await request(app).post("/api/auth/login").send({ email: "look-only@runs.test.example", password: PASSWORD });
     const viewer = { ...team, token: login.body.data.token as string };
     expect((await listRuns(viewer)).status).toBe(200);
     expect((await request(app).get(`/api/runs/${run._id}`).set(authed(viewer.token))).status).toBe(200);
