@@ -29,6 +29,16 @@ const ingestAppLimiter = rateLimit({
   message: { success: false, message: "This app is sending too fast. Please slow down and try again in a minute." },
 });
 
+// Forks ask the AI model, which can cost money, so each workspace may only start a few per minute.
+const forkLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: isTest ? 100000 : 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (_req, res) => String(res.locals.user?.workspaceId),
+  message: { success: false, message: "You are starting forks very quickly. Please wait a minute and try again." },
+});
+
 const demoOnly = (_req: unknown, _res: unknown, next: (err?: unknown) => void) =>
   env.DEMO_MODE ? next() : next(new NotFoundError("The demo is turned off."));
 
@@ -58,6 +68,16 @@ router.post("/apps/:id/revoke-key", authenticateUser, authorizeRoles("owner", "d
 router.get("/runs", authenticateUser, validateRequest(runsController.listRunsQuerySchema, "query"), asyncHandler(runsController.getRuns));
 router.get("/runs/:id", authenticateUser, asyncHandler(runsController.getRunDetail));
 router.get("/runs/:id/steps/:index", authenticateUser, asyncHandler(runsController.getStep));
+router.get("/runs/:id/compare", authenticateUser, asyncHandler(runsController.getRunComparison));
+// Viewers can look at runs but cannot start forks.
+router.post(
+  "/runs/:id/fork",
+  authenticateUser,
+  authorizeRoles("owner", "developer"),
+  forkLimiter,
+  validateRequest(runsController.forkRunSchema),
+  asyncHandler(runsController.forkRunHandler)
+);
 
 // ---------- apps: the SDK sends recorded runs here ----------
 router.post(

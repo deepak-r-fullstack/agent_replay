@@ -59,3 +59,27 @@ export type DisplayStatus = (typeof DISPLAY_STATUSES)[number];
 export const UNFINISHED_AFTER_MS = 60 * 60 * 1000;
 export const DEFAULT_RUNS_PAGE_SIZE = 20;
 export const MAX_RUNS_PAGE_SIZE = 50;
+
+// ---------- forks ----------
+
+// Where a step came from. Steps the SDK recorded are "recorded". In a fork:
+//   copied     before the fork point, copied from the original
+//   rerun      an AI step that was asked again through the AI model
+//   simulated  a tool or lookup that did NOT run; its recorded result was reused
+//   edited     a tool or lookup that did NOT run; its result was typed in by a person
+export const STEP_ORIGINS = ["recorded", "copied", "rerun", "simulated", "edited"] as const;
+export type StepOrigin = (typeof STEP_ORIGINS)[number];
+
+export const MAX_LLM_STEPS_PER_FORK = 20; // each one is a call to the AI model, which can cost money
+export const MAX_FORK_EDITS = 50;
+export const FORK_NAME_SUFFIX = " (fork)";
+// Only text at least this long is swapped into later steps; a short answer like "ok" would match too much.
+export const MIN_REPLACEABLE_TEXT_LENGTH = 8;
+
+// ---------- links to other systems (AgentGuard) ----------
+
+export const EXTERNAL_REF_URL_MAX = 500;
+export const EXTERNAL_REF_ID_MAX = 200;
+export const EXTERNAL_REF_SYSTEM_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+// Only steps linked to this system get the "Undo the original actions" list.
+export const AGENTGUARD_SYSTEM = "agentguard";

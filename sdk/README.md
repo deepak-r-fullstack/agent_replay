@@ -36,6 +36,25 @@ const answer = await ai.chat.completions.create({ model: "gpt-4o-mini", messages
 The wrapped client returns the very same result, and throws the very same errors, as the original.
 Streaming calls pass through and are not recorded in this version. `price` is optional; without it the cost shows as 0.
 
+## Link a step to a record in another system
+
+A step can point to a record somewhere else, for example the [AgentGuard](https://github.com/deepak-r-fullstack/agentguard) action the step caused. In AgentReplay the person replaying the run then gets a button to open it (and, for AgentGuard, a list of actions to undo there).
+
+```ts
+run.step({
+  name: "issue_refund",
+  externalRef: { system: "agentguard", id: action.id, url: `https://your-agentguard.example.com/activity/${action.id}` },
+});
+
+await run.trace("tool", "issue_refund", () => refund(order), {
+  externalRef: { system: "agentguard", id: action.id, url: action.url },
+});
+```
+
+- `system` is a lowercase name (`agentguard`, `stripe`, ...). `id` is that system's id for the record.
+- `url` must be an `https://` link, at most 500 characters, with no password or key inside it. `http://localhost` links are accepted while `NODE_ENV` is not `production`.
+- A link that breaks these rules is left out, and the step is still recorded. Nothing is thrown.
+
 ## It never gets in your way
 
 - **Nothing waits for the network.** Steps go into a small queue and are sent in the background in batches.

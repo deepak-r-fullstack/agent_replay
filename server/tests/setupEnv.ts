@@ -2,3 +2,4 @@
 process.env.NODE_ENV = "test";
 process.env.JWT_SECRET = "test-secret-at-least-16-chars";
 process.env.DEMO_MODE = "true";
+process.env.LLM_PROVIDER = "demo";

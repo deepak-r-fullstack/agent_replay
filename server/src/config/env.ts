@@ -20,6 +20,12 @@ const envSchema = z.object({
   CLIENT_ORIGIN: z.string().default("http://localhost:5173"),
   JWT_SECRET: z.string().min(16).default(DEV_JWT_SECRET),
   JWT_EXPIRES_IN: z.string().default("8h"),
+  // Which AI model forks re-run through. "demo" is a free scripted model that needs no key, so the site works with none.
+  LLM_PROVIDER: z.enum(["demo", "openai", "anthropic", "ollama"]).default("demo"),
+  LLM_MODEL: z.string().optional().default(""),
+  LLM_API_KEY: z.string().optional().default(""),
+  // Only for ollama (local: http://127.0.0.1:11434) or an OpenAI-compatible gateway.
+  LLM_BASE_URL: z.string().optional().default(""),
   // Demo mode turns on the "Try the demo" sign-in.
   DEMO_MODE: z
     .enum(["true", "false"])

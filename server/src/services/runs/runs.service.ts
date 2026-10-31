@@ -1,13 +1,32 @@
 import { FilterQuery, Types } from "mongoose";
+import { isProduction } from "../../config/env";
 import { DisplayStatus, UNFINISHED_AFTER_MS } from "../../constants";
 import { App } from "../../models/app.model";
 import { Run, RunDoc } from "../../models/run.model";
 import { Step } from "../../models/step.model";
+import { isAllowedLinkUrl } from "../../utils/externalRef";
+import { editablePromptOf } from "../forks/forkText";
 
 // Reads runs for the screens. A run's saved status is "running", "ok" or "failed". A run that says "running"
 // but has had no update for an hour is shown as "unfinished": the app that was recording it has probably stopped.
 // That is worked out here, each time, and nothing is changed in the database. If the run does finish later,
 // it simply shows its real status again.
+
+// One line of the timeline. The text of the step is fetched when it is opened.
+export interface StepOutline {
+  index: number;
+  type: string;
+  name: string;
+  model: string;
+  tokens: number;
+  costUsd: number;
+  durationMs: number;
+  startedAt: Date;
+  origin: string;
+  failed: boolean;
+}
+
+export const STEP_OUTLINE_PROJECTION = { _id: 0, index: 1, type: 1, name: 1, model: 1, tokens: 1, costUsd: 1, durationMs: 1, startedAt: 1, origin: { $ifNull: ["$origin", "recorded"] }, failed: { $ne: ["$error", ""] } };
 
 export interface RunListFilters {
   status?: DisplayStatus;
@@ -59,10 +78,10 @@ export function buildRunFilter(workspaceId: Types.ObjectId, filters: RunListFilt
   return { $and: conditions };
 }
 
-type LeanRun = RunDoc & { createdAt?: Date };
+export type LeanRun = RunDoc & { createdAt?: Date };
 
 // The same fields in the list and on the replay screen. Never includes anything internal.
-function toRunSummary(run: LeanRun, appNames: Map<string, string>, now: Date) {
+export function toRunSummary(run: LeanRun, appNames: Map<string, string>, now: Date) {
   return {
     id: String(run._id),
     name: run.name,
@@ -84,7 +103,7 @@ function toRunSummary(run: LeanRun, appNames: Map<string, string>, now: Date) {
   };
 }
 
-async function appNamesOf(workspaceId: Types.ObjectId) {
+export async function appNamesOf(workspaceId: Types.ObjectId) {
   const apps = await App.find({ workspaceId }).select("name").lean();
   return new Map(apps.map((app) => [String(app._id), app.name]));
 }
@@ -112,10 +131,10 @@ export async function getRunWithSteps(workspaceId: Types.ObjectId, runId: string
 
   const [steps, appNames, parent] = await Promise.all([
     // The timeline only needs the outline of each step. The text (up to 64 KB per step) is fetched one step at a time.
-    Step.aggregate<{ index: number; type: string; name: string; model: string; tokens: number; costUsd: number; durationMs: number; startedAt: Date; failed: boolean }>([
+    Step.aggregate<StepOutline>([
       { $match: { runId: run._id } },
       { $sort: { index: 1 } },
-      { $project: { _id: 0, index: 1, type: 1, name: 1, model: 1, tokens: 1, costUsd: 1, durationMs: 1, startedAt: 1, failed: { $ne: ["$error", ""] } } },
+      { $project: STEP_OUTLINE_PROJECTION },
     ]),
     appNamesOf(workspaceId),
     run.parentRunId ? Run.findOne({ _id: run.parentRunId, workspaceId }).select("name").lean() : null,
@@ -145,5 +164,10 @@ export async function getStepDetail(workspaceId: Types.ObjectId, runId: string, 
     durationMs: step.durationMs,
     error: step.error,
     startedAt: step.startedAt,
+    origin: step.origin ?? "recorded",
+    // What a person edits when forking an AI step: the last thing the AI was asked.
+    editablePrompt: step.type === "llm" ? editablePromptOf(step.input) : null,
+    // Shown as a link, so it is checked again here, whatever was saved before.
+    externalRef: step.externalRef && isAllowedLinkUrl(step.externalRef.url, isProduction) ? { system: step.externalRef.system, id: step.externalRef.id, url: step.externalRef.url } : null,
   };
 }

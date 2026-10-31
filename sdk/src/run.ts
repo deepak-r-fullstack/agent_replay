@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { cleanExternalRef } from "./externalRef";
 import { prepareText } from "./text";
 import { Transport } from "./transport";
 import { RunStatus, StartRunOptions, StepInput, StepRecord, StepType, TraceOptions } from "./types";
@@ -80,6 +81,8 @@ export class Run {
         error,
         startedAt: new Date(startedAtMs).toISOString(),
       };
+      const externalRef = cleanExternalRef(step.externalRef);
+      if (externalRef) record.externalRef = externalRef;
       this.transport.enqueueStep(record);
     } catch {
       // Dropped quietly on purpose.
@@ -134,6 +137,7 @@ export class Run {
           model: options.model,
           tokens: options.tokens,
           costUsd: options.costUsd,
+          externalRef: options.externalRef,
           durationMs: Date.now() - startedAtMs,
           error: failed ? outcome.error : undefined,
         },

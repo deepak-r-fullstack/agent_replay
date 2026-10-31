@@ -6,6 +6,8 @@ export type StepType = (typeof STEP_TYPES)[number];
 export type RunStatus = "running" | "ok" | "failed";
 
 // What the server accepts (see server/src/controllers/ingest.controller.ts).
+import { ExternalRef } from "./externalRef";
+
 export interface RunUpdate {
   id: string;
   name?: string;
@@ -29,6 +31,7 @@ export interface StepRecord {
   durationMs: number;
   error: string;
   startedAt: string;
+  externalRef?: ExternalRef;
 }
 
 export interface FetchResponseLike {
@@ -78,6 +81,8 @@ export interface StepInput {
   durationMs?: number;
   /** An Error or text. Marks the step as failed. */
   error?: unknown;
+  /** A link to a record in another system, for example the AgentGuard action this step caused. */
+  externalRef?: ExternalRef;
 }
 
 export interface TraceOptions<T = unknown> {
@@ -85,6 +90,8 @@ export interface TraceOptions<T = unknown> {
   model?: string;
   tokens?: number;
   costUsd?: number;
+  /** A link to a record in another system, for example the AgentGuard action this step caused. */
+  externalRef?: ExternalRef;
   /** Choose what to record as the output. Defaults to the whole result. */
   output?: (result: T) => unknown;
 }

@@ -1,4 +1,4 @@
-import { DisplayStatus, StepType, UserRole } from "utils/types";
+import { DisplayStatus, StepOrigin, StepType, UserRole } from "utils/types";
 
 export function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
@@ -59,3 +59,23 @@ export const STEP_TYPE_META: Record<StepType, { label: string; hint: string }> =
   retrieval: { label: "Lookup", hint: "Fetching information, such as searching a database or documents." },
   custom: { label: "Step", hint: "Anything else the app chose to record." },
 };
+
+// How a step in a fork was made, in plain words. Steps the SDK recorded have no label.
+export const STEP_ORIGIN_META: Partial<Record<StepOrigin, { label: string; note: string }>> = {
+  copied: { label: "Copied", note: "Copied from the original run, exactly as it was." },
+  rerun: { label: "Asked again", note: "The AI was asked again for this fork, so its answer may be different from the original." },
+  simulated: { label: "Simulated", note: "This did not run. Tools are simulated in a fork: nothing real happens. The result the original run recorded was reused." },
+  edited: { label: "You typed the result", note: "This did not run. Tools are simulated in a fork: nothing real happens. The result below is the one you typed." },
+};
+
+// Only https links open from the app, plus http://localhost links while developing. The server checks this too.
+export function safeLink(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.username || parsed.password) return null;
+    const ok = parsed.protocol === "https:" || (import.meta.env.DEV && parsed.protocol === "http:" && parsed.hostname === "localhost");
+    return ok ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}

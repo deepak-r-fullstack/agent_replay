@@ -1,5 +1,5 @@
-import { ButtonHTMLAttributes, ReactNode } from "react";
-import { Loader2, X } from "lucide-react";
+import { ButtonHTMLAttributes, ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { CircleHelp, Loader2, X } from "lucide-react";
 import { STATUS_META } from "utils/helper_functions/format";
 import { useToastStore } from "utils/store/toastStore";
 import { DisplayStatus } from "utils/types";
@@ -61,24 +61,118 @@ export const DisplayBadge = ({ label, tone = "neutral" }: { label: string; tone?
   <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONE_STYLES[tone]}`}>{label}</span>
 );
 
-// A run's status, in plain words. Hovering (or focusing) it explains what it means.
-export const DisplayStatusBadge = ({ status }: { status: DisplayStatus }) => {
-  const meta = STATUS_META[status];
+// ---------- Tap-to-explain hints ----------
+
+// A short explanation that opens when you TAP or click it (or press Enter), and also when the mouse rests on it.
+// Hover-only hints (the title="" attribute) cannot be read on a phone, so every hint in the app uses this instead.
+// It closes on a second tap, a tap anywhere else, Escape, or scrolling. It is fixed to the screen, so a table or
+// card around it can never cut it off, and it is kept inside the screen edges.
+const TIP_WIDTH = 256;
+
+const Tip = ({ meaning, children, className = "", label }: { meaning: string; children: ReactNode; className?: string; label?: string }) => {
+  const id = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const bubbleRef = useRef<HTMLSpanElement>(null);
+  const pinned = useRef(false);
+  const [open, setOpen] = useState(false);
+  const [place, setPlace] = useState({ top: 0, left: 0 });
+
+  const close = useCallback(() => {
+    pinned.current = false;
+    setOpen(false);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const width = Math.min(TIP_WIDTH, window.innerWidth - 16);
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    // Below the hint, unless there is no room there; then above it.
+    const height = bubbleRef.current?.offsetHeight ?? 0;
+    const below = rect.bottom + 6;
+    const top = below + height > window.innerHeight - 8 && rect.top - height - 6 > 8 ? rect.top - height - 6 : below;
+    setPlace({ top, left });
+  }, [open, meaning]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!triggerRef.current?.contains(event.target as Node)) close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && close();
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open, close]);
+
   return (
-    <span title={meta.hint} className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONE_STYLES[meta.tone]}`}>
-      {meta.label}
+    <span className="inline">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-expanded={open}
+        aria-describedby={open ? id : undefined}
+        aria-label={label}
+        className={className}
+        onClick={() => {
+          pinned.current = !pinned.current;
+          setOpen(pinned.current);
+        }}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => !pinned.current && setOpen(false)}
+        onBlur={close}
+      >
+        {children}
+      </button>
+      {open && (
+        <span
+          id={id}
+          ref={bubbleRef}
+          role="tooltip"
+          style={{ top: place.top, left: place.left, width: Math.min(TIP_WIDTH, window.innerWidth - 16) }}
+          className="fixed z-50 whitespace-pre-line rounded-md bg-ink px-3 py-2 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-white shadow-lg"
+        >
+          {meaning}
+        </span>
+      )}
     </span>
   );
 };
 
-// ---------- Plain-words tooltip ----------
-
-// A term people may not know, with a dotted underline. Hover or keyboard focus shows the explanation.
+// A term people may not know, with a dotted underline. Tap or click it to read what it means.
 export const DisplayTip = ({ term, meaning }: { term: string; meaning: string }) => (
-  <abbr title={meaning} tabIndex={0} className="cursor-help underline decoration-dotted underline-offset-2">
+  <Tip meaning={meaning} className="cursor-help underline decoration-dotted underline-offset-2">
     {term}
-  </abbr>
+  </Tip>
 );
+
+// A small round "?" next to a label, for a longer explanation.
+export const DisplayHelp = ({ meaning, label = "What does this mean?" }: { meaning: string; label?: string }) => (
+  <Tip meaning={meaning} label={label} className="ml-1 inline-flex align-middle text-ink-faint hover:text-ink">
+    <CircleHelp className="h-4 w-4" aria-hidden />
+  </Tip>
+);
+
+// A run's status, in plain words. With `explain`, tapping it says what it means.
+export const DisplayStatusBadge = ({ status, explain = false }: { status: DisplayStatus; explain?: boolean }) => {
+  const meta = STATUS_META[status];
+  const badge = `inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONE_STYLES[meta.tone]}`;
+  if (explain) {
+    return (
+      <Tip meaning={meta.hint} className={`${badge} cursor-help`}>
+        {meta.label}
+      </Tip>
+    );
+  }
+  return <span className={badge}>{meta.label}</span>;
+};
 
 // ---------- Page header ----------
 

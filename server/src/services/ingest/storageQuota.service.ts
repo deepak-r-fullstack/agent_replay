@@ -6,7 +6,9 @@ import {
   STORAGE_COUNTER_KEEP_DAYS,
   STORAGE_TOTAL_KEY,
 } from "../../constants";
+import { TooManyRequestsError } from "../../helpers/errors";
 import { StorageUsage } from "../../models/storageUsage.model";
+import { Workspace } from "../../models/workspace.model";
 import { isDuplicateKeyError } from "../../utils/mongoErrors";
 
 // Keeps one workspace from filling the shared free database. Each check is one small update on a counter
@@ -58,4 +60,12 @@ export async function reserveStorage(workspaceId: Types.ObjectId, isDemo: boolea
 /** Gives reserved room back, for example when the batch could not be saved after all. */
 export async function releaseStorage(workspaceId: Types.ObjectId, bytes: number, now = new Date(), keys = [dayKey(now), STORAGE_TOTAL_KEY]) {
   await StorageUsage.updateMany({ workspaceId, day: { $in: keys } }, { $inc: { bytes: -bytes } });
+}
+
+/** Reserves room for `bytes` for a workspace, or answers 429 with a friendly message. Used by everything that saves step text. */
+export async function assertStorageRoom(workspaceId: Types.ObjectId, bytes: number, now = new Date()) {
+  const workspace = await Workspace.findById(workspaceId).select("isDemo").lean();
+  const refusal = await reserveStorage(workspaceId, Boolean(workspace?.isDemo), bytes, now);
+  if (refusal === "day") throw new TooManyRequestsError("This workspace has reached its storage limit for today.");
+  if (refusal === "total") throw new TooManyRequestsError("This workspace has reached its storage limit.");
 }

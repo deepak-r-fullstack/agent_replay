@@ -1,5 +1,5 @@
 import { apiClient } from "./apiClient";
-import { ApiEnvelope, AppSummary, AppWithKey, RunDetail, RunFilters, RunsPage, SessionUser, SignupInput, StepDetail } from "utils/types";
+import { ApiEnvelope, AppSummary, AppWithKey, ForkInput, RunComparison, RunDetail, RunFilters, RunSummary, RunsPage, SessionUser, SignupInput, StepDetail } from "utils/types";
 
 // Thin wrappers around each endpoint. They return the full envelope; screens read `data` (and `message` when they want it).
 
@@ -29,4 +29,6 @@ export const runService = {
     unwrap<RunsPage>(apiClient.get("/runs", { params: { ...filters, page } })),
   get: (id: string) => unwrap<RunDetail>(apiClient.get(`/runs/${id}`)),
   step: (id: string, index: number) => unwrap<StepDetail>(apiClient.get(`/runs/${id}/steps/${index}`)),
+  fork: (id: string, input: ForkInput) => unwrap<{ run: RunSummary }>(apiClient.post(`/runs/${id}/fork`, input)),
+  compare: (forkId: string) => unwrap<RunComparison>(apiClient.get(`/runs/${forkId}/compare`)),
 };

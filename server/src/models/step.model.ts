@@ -1,5 +1,5 @@
 import { Schema, model, InferSchemaType, Types } from "mongoose";
-import { STEP_TYPES } from "../constants";
+import { STEP_ORIGINS, STEP_TYPES } from "../constants";
 
 // One step of a run: an AI call, a tool call, a lookup. Steps are written once and never change.
 const stepSchema = new Schema({
@@ -15,6 +15,13 @@ const stepSchema = new Schema({
   durationMs: { type: Number, default: 0 },
   error: { type: String, default: "" }, // empty = the step worked
   startedAt: { type: Date, default: Date.now },
+  // Where the step came from: recorded by the SDK, or one of the ways a fork builds its steps.
+  origin: { type: String, enum: STEP_ORIGINS, default: "recorded" },
+  // A link to a record in another system, for example the AgentGuard action this step caused.
+  externalRef: {
+    type: new Schema({ system: { type: String, required: true }, id: { type: String, required: true }, url: { type: String, required: true } }, { _id: false }),
+    default: undefined,
+  },
 });
 
 // The replay timeline, and the guard that makes a repeated batch change nothing.
