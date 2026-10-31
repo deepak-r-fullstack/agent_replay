@@ -1,0 +1,25 @@
+{
+  "name": "agentreplay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Record every step of an AI run, replay it, fork any step, and save failures as tests.",
+  "author": "Deepak R",
+  "license": "MIT",
+  "workspaces": [
+    "sdk",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
+    "test": "npm test -w sdk && npm test -w server",
+    "typecheck": "npm run typecheck -w sdk && npm run typecheck -w server && npm run typecheck -w client",
+    "build": "npm run build -w sdk && npm run build -w server && npm run build -w client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
