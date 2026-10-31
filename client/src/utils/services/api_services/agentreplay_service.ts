@@ -1,5 +1,5 @@
 import { apiClient } from "./apiClient";
-import { ApiEnvelope, AppSummary, AppWithKey, ForkInput, RunComparison, RunDetail, RunFilters, RunSummary, RunsPage, SessionUser, SignupInput, StepDetail } from "utils/types";
+import { ApiEnvelope, AppSummary, AppWithKey, Check, CreateTestInput, ForkInput, SuiteRun, TestSummary, TestsPage, RunComparison, RunDetail, RunFilters, RunSummary, RunsPage, SessionUser, SignupInput, StepDetail } from "utils/types";
 
 // Thin wrappers around each endpoint. They return the full envelope; screens read `data` (and `message` when they want it).
 
@@ -29,6 +29,16 @@ export const runService = {
     unwrap<RunsPage>(apiClient.get("/runs", { params: { ...filters, page } })),
   get: (id: string) => unwrap<RunDetail>(apiClient.get(`/runs/${id}`)),
   step: (id: string, index: number) => unwrap<StepDetail>(apiClient.get(`/runs/${id}/steps/${index}`)),
-  fork: (id: string, input: ForkInput) => unwrap<{ run: RunSummary }>(apiClient.post(`/runs/${id}/fork`, input)),
+  // A fork asks the AI model, and the server gives it up to 90 seconds, so this waits a little longer than that.
+  fork: (id: string, input: ForkInput) => unwrap<{ run: RunSummary }>(apiClient.post(`/runs/${id}/fork`, input, { timeout: 100_000 })),
   compare: (forkId: string) => unwrap<RunComparison>(apiClient.get(`/runs/${forkId}/compare`)),
+};
+
+export const testService = {
+  list: () => unwrap<TestsPage>(apiClient.get("/tests")),
+  create: (input: CreateTestInput) => unwrap<{ test: TestSummary }>(apiClient.post("/tests", input)),
+  update: (id: string, changes: { name?: string; checks?: Check[] }) => unwrap<{ test: TestSummary }>(apiClient.put(`/tests/${id}`, changes)),
+  remove: (id: string) => unwrap<null>(apiClient.delete(`/tests/${id}`)),
+  // Asks the AI once per test, and the server gives the whole run up to 90 seconds, so this waits a little longer than that.
+  runAll: (model?: string) => unwrap<SuiteRun>(apiClient.post("/tests/run", model ? { model } : {}, { timeout: 100_000 })),
 };

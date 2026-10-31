@@ -1,8 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { appService, runService } from "utils/services/api_services/agentreplay_service";
+import { appService, runService, testService } from "utils/services/api_services/agentreplay_service";
 import { getErrorMessage } from "utils/services/api_services/apiClient";
 import { showToast } from "utils/store/toastStore";
-import { ForkInput, RunFilters } from "utils/types";
+import { Check, CreateTestInput, ForkInput, RunFilters } from "utils/types";
 
 // React Query hooks, one per screen need. Mutations refresh every list they can change,
 // so screens never show stale state after a key is created or revoked.
@@ -13,6 +13,7 @@ export const queryKeys = {
   run: (id: string) => ["run", id] as const,
   step: (id: string, index: number) => ["step", id, index] as const,
   comparison: (id: string) => ["comparison", id] as const,
+  tests: ["tests"] as const,
 };
 
 // Runs arrive from apps at any time, so what is on screen refreshes itself.
@@ -100,5 +101,49 @@ export function useComparison(forkId: string) {
     queryKey: queryKeys.comparison(forkId),
     queryFn: () => runService.compare(forkId).then((response) => response.data),
     staleTime: Infinity,
+  });
+}
+
+// ---------- tests and suites ----------
+
+export function useTests() {
+  return useQuery({ queryKey: queryKeys.tests, queryFn: () => testService.list().then((response) => response.data) });
+}
+
+export function useCreateTest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTestInput) => testService.create(input).then((response) => response.data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.tests }),
+  });
+}
+
+export function useUpdateTest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...changes }: { id: string; name?: string; checks?: Check[] }) => testService.update(id, changes).then((response) => response.data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.tests }),
+    onError: (error) => showToast(getErrorMessage(error), "error"),
+  });
+}
+
+export function useDeleteTest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => testService.remove(id),
+    onSuccess: () => {
+      showToast("Test deleted.");
+      queryClient.invalidateQueries({ queryKey: queryKeys.tests });
+    },
+    onError: (error) => showToast(getErrorMessage(error), "error"),
+  });
+}
+
+// Asks the AI once per test, so it can take a little while.
+export function useRunAllTests() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (model?: string) => testService.runAll(model).then((response) => response.data),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.tests }),
   });
 }

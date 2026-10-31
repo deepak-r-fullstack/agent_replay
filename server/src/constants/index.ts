@@ -71,6 +71,15 @@ export const STEP_ORIGINS = ["recorded", "copied", "rerun", "simulated", "edited
 export type StepOrigin = (typeof STEP_ORIGINS)[number];
 
 export const MAX_LLM_STEPS_PER_FORK = 20; // each one is a call to the AI model, which can cost money
+
+// ---------- keeping AI costs under control ----------
+// A fork asks an AI model, and with a real provider that costs the owner money. Anyone can start forks,
+// including visitors to the demo, so every fork is capped in how long, how often and how big.
+export const MAX_ANSWER_TOKENS = 1500; // the longest answer one AI call may give
+export const AI_CALL_TIMEOUT_MS = 30_000; // one AI call
+export const FORK_TIME_LIMIT_MS = 90_000; // a whole fork, all its AI calls together
+export const MAX_FORKS_PER_DAY_REAL_PROVIDER = 30; // per workspace, per UTC day, when forks use a paid AI provider
+export const MAX_FORKS_PER_DAY_DEMO_PROVIDER = 100; // the free scripted demo model costs nothing, so the limit is higher
 export const MAX_FORK_EDITS = 50;
 export const FORK_NAME_SUFFIX = " (fork)";
 // Only text at least this long is swapped into later steps; a short answer like "ok" would match too much.
@@ -83,3 +92,29 @@ export const EXTERNAL_REF_ID_MAX = 200;
 export const EXTERNAL_REF_SYSTEM_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 // Only steps linked to this system get the "Undo the original actions" list.
 export const AGENTGUARD_SYSTEM = "agentguard";
+
+// ---------- tests and suites ----------
+
+// What a saved test can check about the AI's answer. contains / not_contains / equals look at the words;
+// max_cost (US dollars) and max_ms (milliseconds) look at what the answer cost and how long it took.
+export const CHECK_TYPES = ["contains", "not_contains", "equals", "max_cost", "max_ms"] as const;
+export type CheckType = (typeof CHECK_TYPES)[number];
+
+// How the answer of a test run compares with the same test's previous run.
+export const RESULT_CHANGES = ["improved", "same", "worse", "new", "not_run"] as const;
+export type ResultChange = (typeof RESULT_CHANGES)[number];
+// passed / failed: the checks were run. error: the AI could not be asked. skipped: the suite ran out of time first.
+export const RESULT_OUTCOMES = ["passed", "failed", "error", "skipped"] as const;
+export type ResultOutcome = (typeof RESULT_OUTCOMES)[number];
+
+// Running all tests asks the AI once per test, which can cost money with a paid provider, so it is bounded like forks.
+export const MAX_TESTS_PER_WORKSPACE = 20; // also the most AI calls one "Run all" can make
+export const MAX_CHECKS_PER_TEST = 10;
+export const MAX_CHECK_TEXT_LENGTH = 500;
+export const TEST_CONCURRENCY = 5; // tests asked at the same time
+export const SUITE_TIME_LIMIT_MS = 90_000; // a whole "Run all"
+export const MAX_TEST_AI_CALLS_PER_DAY_REAL_PROVIDER = 100; // per workspace, per UTC day, with a paid provider
+export const MAX_TEST_AI_CALLS_PER_DAY_DEMO_PROVIDER = 500;
+export const MAX_TEST_OUTPUT_BYTES = 4 * 1024; // the answer kept with a result (checks look at the whole answer)
+export const TEST_RESULT_KEEP_DAYS = 30; // old results delete themselves
+export const MAX_TEST_NAME_LENGTH = 120;

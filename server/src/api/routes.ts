@@ -10,6 +10,7 @@ import * as authController from "../controllers/auth.controller";
 import * as appsController from "../controllers/apps.controller";
 import * as ingestController from "../controllers/ingest.controller";
 import * as runsController from "../controllers/runs.controller";
+import * as testsController from "../controllers/tests.controller";
 
 const router = Router();
 
@@ -37,6 +38,16 @@ const forkLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (_req, res) => String(res.locals.user?.workspaceId),
   message: { success: false, message: "You are starting forks very quickly. Please wait a minute and try again." },
+});
+
+// Running all tests asks the AI once per test, so each workspace may only do it a few times a minute.
+const suiteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: isTest ? 100000 : 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (_req, res) => String(res.locals.user?.workspaceId),
+  message: { success: false, message: "You are running tests very quickly. Please wait a minute and try again." },
 });
 
 const demoOnly = (_req: unknown, _res: unknown, next: (err?: unknown) => void) =>
@@ -78,6 +89,20 @@ router.post(
   validateRequest(runsController.forkRunSchema),
   asyncHandler(runsController.forkRunHandler)
 );
+
+// ---------- people: tests (everyone may look; owners and developers may save, change, delete and run) ----------
+router.get("/tests", authenticateUser, asyncHandler(testsController.getTests));
+router.post("/tests", authenticateUser, authorizeRoles("owner", "developer"), validateRequest(testsController.createTestSchema), asyncHandler(testsController.addTest));
+router.post(
+  "/tests/run",
+  authenticateUser,
+  authorizeRoles("owner", "developer"),
+  suiteLimiter,
+  validateRequest(testsController.runSuiteSchema),
+  asyncHandler(testsController.runAllTests)
+);
+router.put("/tests/:id", authenticateUser, authorizeRoles("owner", "developer"), validateRequest(testsController.updateTestSchema), asyncHandler(testsController.editTest));
+router.delete("/tests/:id", authenticateUser, authorizeRoles("owner", "developer"), asyncHandler(testsController.removeTest));
 
 // ---------- apps: the SDK sends recorded runs here ----------
 router.post(

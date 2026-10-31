@@ -189,7 +189,8 @@ export const ForkPanel = ({ runId, from, steps, onCancel }: { runId: string; fro
           <DisplayError message={getErrorMessage(fork.error)} />
         </div>
       )}
-      <div className="mt-4 flex flex-wrap gap-2">
+      <p className="mt-2 text-xs text-ink-faint">Asking the AI can take a few seconds. A fork that takes longer than 90 seconds is stopped and nothing is saved.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
         <DisplayButton variant="primary" size="lg" loading={fork.isPending} disabled={!step} onClick={start} icon={<GitFork className="h-4 w-4" aria-hidden />}>
           {fork.isPending ? "Starting the fork" : "Start the fork"}
         </DisplayButton>

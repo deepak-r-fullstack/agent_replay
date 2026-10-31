@@ -9,9 +9,9 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 | 1 | Foundation: sign-up, sign-in, apps and SDK keys, CI | done |
 | 2 | SDK and ingest | done |
 | 3 | Runs list and replay screens | done |
-| 4 | Fork, fix and undo | in review |
-| 5 | Tests and suites | next |
-| 6 | Demo data, docs, deploy | |
+| 4 | Fork, fix and undo | done |
+| 5 | Tests and suites | in review |
+| 6 | Demo data, docs, deploy | next |
 
 ## Milestone 3 checklist (runs list and replay screens)
 
@@ -23,7 +23,9 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 - Seed data that tells the refund story (wrong amount, fork at step 3, fixed, save as test).
 - README screenshots and the 3-minute demo script, `render.yaml`, SDK ready to publish.
 - **Protect the shared demo workspace.** Every demo visitor shares one workspace, so one visitor can change what the next one sees. Plan a regular demo reset, or protect the seeded items: seeded apps cannot be revoked or rotated, and some app slots stay free so visitors can always add one.
+- **Seed tests for the refund story.** Save the fixed refund answer as a test (must mention ₹2,400, must not mention ₹1,800) and one more simple test, so that on the live demo "Run all tests" shows everything passing, and running them again with the free model **demo-fast** shows a test turning red ("Got worse").
 - **Link the demo seed to AgentGuard.** The demo seed's wrong refund step links to the matching action in AgentGuard's demo (a step `externalRef` with system `agentguard`), so "Undo the original actions" works in the demo.
+- **`render.yaml` settings for AI costs.** Set `LLM_PROVIDER` to `demo` (the free scripted model; it needs no key). List the other AI settings so they are easy to find, with `sync: false` for any secret: `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL`, and **`LLM_ALLOWED_MODELS`** (comma-separated; the only models a fork may use with a paid provider; leave it empty to allow only `LLM_MODEL`). Also list `LLM_INPUT_PRICE_PER_MILLION` and `LLM_OUTPUT_PRICE_PER_MILLION` (what the provider charges, so costs show and "cost under" checks can fail; 0 = not known). Even with a paid provider set, the demo workspace always uses the free model, forks are limited to 30 a day per workspace (100 with the demo model), each answer is capped at 1,500 tokens, each AI call may take 30 seconds and a whole fork 90. "Run all tests" has its own limits: 20 tests per workspace, 100 AI calls a day per workspace with a paid provider (500 with the demo model), 5 tests asked at a time, 90 seconds for the whole run.
 - **Before deploy, add one global storage limit across all workspaces (250 MB), because new workspaces are free to create and the Atlas cluster is shared with AgentGuard.**
 - **Reset the demo's storage counters with its clean-up.** The demo workspace's all-time storage counter (`storage_usage`, day `total`) only goes up. When old demo runs are deleted, lower or reset that counter too, or the demo will stop accepting new steps after about 20 days of full use.
 

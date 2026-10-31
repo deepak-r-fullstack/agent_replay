@@ -9,7 +9,7 @@ import {
 import { TooManyRequestsError } from "../../helpers/errors";
 import { StorageUsage } from "../../models/storageUsage.model";
 import { Workspace } from "../../models/workspace.model";
-import { isDuplicateKeyError } from "../../utils/mongoErrors";
+import { raiseWithinLimit } from "../../utils/atomicCounter";
 
 // Keeps one workspace from filling the shared free database. Each check is one small update on a counter
 // document (no scan of steps). The counter is only raised if the new total stays within the limit, and that
@@ -26,23 +26,8 @@ export function dailyLimitFor(isDemo: boolean) {
 }
 
 // Adds `bytes` to one counter if the result stays within `limit`. Returns false when it would not.
-async function raiseCounter(workspaceId: Types.ObjectId, day: string, bytes: number, limit: number, expiresAt?: Date) {
-  // A counter that does not exist yet would be created by the update below whatever the size, so check that first.
-  if (bytes > limit) return false;
-  try {
-    await StorageUsage.updateOne(
-      // Matches only while there is still room. Otherwise the update tries to create the counter,
-      // finds it already exists (unique index) and fails: that failure means "no room".
-      { workspaceId, day, bytes: { $lte: limit - bytes } },
-      { $inc: { bytes }, ...(expiresAt ? { $setOnInsert: { expiresAt } } : {}) },
-      { upsert: true }
-    );
-    return true;
-  } catch (err) {
-    if (isDuplicateKeyError(err)) return false;
-    throw err;
-  }
-}
+const raiseCounter = (workspaceId: Types.ObjectId, day: string, bytes: number, limit: number, expiresAt?: Date) =>
+  raiseWithinLimit(StorageUsage, { workspaceId, day }, "bytes", bytes, limit, expiresAt);
 
 /** Reserves room for `bytes` of new text. Returns null when reserved, or why it was refused (nothing is kept then). */
 export async function reserveStorage(workspaceId: Types.ObjectId, isDemo: boolean, bytes: number, now = new Date()): Promise<QuotaRefusal | null> {

@@ -1,4 +1,4 @@
-import { DisplayStatus, StepOrigin, StepType, UserRole } from "utils/types";
+import { Check, CheckType, DisplayStatus, ResultChange, ResultOutcome, StepOrigin, StepType, UserRole } from "utils/types";
 
 export function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
@@ -79,3 +79,38 @@ export function safeLink(url: string): string | null {
     return null;
   }
 }
+
+// ---------- tests ----------
+
+// What each kind of check says, in plain words. For cost and time the person types dollars and seconds.
+export const CHECK_META: Record<CheckType, { label: string; kind: "words" | "dollars" | "seconds"; placeholder: string }> = {
+  contains: { label: "The answer must mention", kind: "words", placeholder: "For example ₹2,400" },
+  not_contains: { label: "The answer must not mention", kind: "words", placeholder: "For example sorry" },
+  equals: { label: "The answer must be exactly", kind: "words", placeholder: "The whole answer" },
+  max_cost: { label: "The answer must cost no more than (US dollars)", kind: "dollars", placeholder: "For example 0.01" },
+  max_ms: { label: "The answer must come within (seconds)", kind: "seconds", placeholder: "For example 5" },
+};
+
+// A check as one sentence, for the list of tests.
+export function describeCheck(check: Check): string {
+  const meta = CHECK_META[check.type];
+  if (meta.kind === "words") return `${meta.label.replace("The answer must ", "Must ")}: "${check.value}"`;
+  if (check.type === "max_cost") return `Cost no more than $${check.value}`;
+  const seconds = Number(check.value) / 1000;
+  return `Answer within ${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)} seconds`;
+}
+
+export const OUTCOME_META: Record<ResultOutcome, { label: string; tone: "done" | "waiting" | "refused" | "neutral" }> = {
+  passed: { label: "Passed", tone: "done" },
+  failed: { label: "Failed", tone: "refused" },
+  error: { label: "Could not run", tone: "waiting" },
+  skipped: { label: "Not run", tone: "waiting" },
+};
+
+export const CHANGE_META: Record<ResultChange, { label: string; tone: "done" | "waiting" | "refused" | "neutral" }> = {
+  improved: { label: "Got better", tone: "done" },
+  worse: { label: "Got worse", tone: "refused" },
+  same: { label: "Same as before", tone: "neutral" },
+  new: { label: "First time", tone: "neutral" },
+  not_run: { label: "Could not compare", tone: "waiting" },
+};
