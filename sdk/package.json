@@ -1,0 +1,24 @@
+{
+  "name": "agentreplay",
+  "version": "0.1.0",
+  "description": "Record every step of an AI run and replay it in AgentReplay.",
+  "license": "MIT",
+  "author": "Deepak R",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"SDK tests arrive with the SDK in milestone 2\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
