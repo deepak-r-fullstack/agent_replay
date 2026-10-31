@@ -39,3 +39,13 @@ export const MAX_STEP_TEXT_BYTES = 32 * 1024; // input and output of one step
 export const MAX_STEP_ERROR_BYTES = 4 * 1024;
 export const INGEST_BODY_LIMIT = "4mb"; // the rest of the API keeps its small 100kb limit
 export const UNTITLED_RUN_NAME = "Untitled run";
+
+// Storage limits per workspace. The free Atlas cluster holds 512 MB in total and is shared with AgentGuard,
+// so no single workspace may fill it. Counted in bytes of NEW step text (name + input + output + error).
+export const MAX_BYTES_PER_WORKSPACE_PER_DAY = 20 * 1024 * 1024;
+export const MAX_BYTES_PER_DEMO_WORKSPACE_PER_DAY = 5 * 1024 * 1024; // the demo is open to anyone, so it gets less
+export const MAX_BYTES_PER_WORKSPACE_TOTAL = 100 * 1024 * 1024;
+// The counter key that holds a workspace's all-time total (the daily counters use the date, for example "2026-10-31").
+export const STORAGE_TOTAL_KEY = "total";
+// Daily counters tidy themselves away after this long.
+export const STORAGE_COUNTER_KEEP_DAYS = 40;

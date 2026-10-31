@@ -13,11 +13,17 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 | 5 | Tests and suites | |
 | 6 | Demo data, docs, deploy | |
 
+## Milestone 3 checklist (runs list and replay screens)
+
+- Runs list with filters and paging; replay timeline with step details; failed steps in red.
+- **Show "Unfinished" for stuck runs.** A run that is still "running" but has had no update for 1 hour is shown as "Unfinished" (a plain-words badge with a tooltip: "This run never reported that it finished. The app may have stopped."), in the list, the filters and the replay header. It is worked out when the page is shown; nothing in the database changes. If the run finishes later, it simply shows its real status again.
+
 ## Milestone 6 checklist (demo, docs, deploy)
 
 - Seed data that tells the refund story (wrong amount, fork at step 3, fixed, save as test).
 - README screenshots and the 3-minute demo script, `render.yaml`, SDK ready to publish.
 - **Protect the shared demo workspace.** Every demo visitor shares one workspace, so one visitor can change what the next one sees. Plan a regular demo reset, or protect the seeded items: seeded apps cannot be revoked or rotated, and some app slots stay free so visitors can always add one.
+- **Reset the demo's storage counters with its clean-up.** The demo workspace's all-time storage counter (`storage_usage`, day `total`) only goes up. When old demo runs are deleted, lower or reset that counter too, or the demo will stop accepting new steps after about 20 days of full use.
 
 ## What is in the repo
 

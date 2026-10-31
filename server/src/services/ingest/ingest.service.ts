@@ -1,16 +1,22 @@
 import { AnyBulkWriteOperation, Types } from "mongoose";
 import { MAX_STEP_ERROR_BYTES, UNTITLED_RUN_NAME } from "../../constants";
+import { TooManyRequestsError } from "../../helpers/errors";
 import { AppDoc } from "../../models/app.model";
 import { Run } from "../../models/run.model";
 import { Step } from "../../models/step.model";
+import { Workspace } from "../../models/workspace.model";
+import { isDuplicateKeyError } from "../../utils/mongoErrors";
 import { prepareText } from "../../utils/text";
 import { IngestBatch, IngestRun, IngestStep } from "./ingestSchemas";
+import { releaseStorage, reserveStorage } from "./storageQuota.service";
 
 // Saves a batch of runs and steps sent by the SDK. Built so that batches can arrive late, out of order or twice:
 //  - runs and steps are written with upserts, so the same batch sent again changes nothing
 //  - steps can arrive before their run does; the run is created as a placeholder and filled in later
 //  - a finished run is never taken back to "running" by a late message
 //  - the whole batch costs a handful of database calls, not one per step
+//  - a workspace has a storage limit; a batch that would go over it is refused whole, before anything is saved,
+//    and steps that were already saved are not counted again
 
 export interface IngestResult {
   runs: number;
@@ -68,7 +74,29 @@ function buildRunUpsert(app: AppDoc, update: IngestRun, now: Date): AnyBulkWrite
   };
 }
 
-function buildStepUpsert(runId: Types.ObjectId, step: IngestStep, now: Date): AnyBulkWriteOperation {
+// The text of a step as it will be stored: secrets hidden, cut to size.
+interface StepText {
+  name: string;
+  input: string;
+  output: string;
+  error: string;
+}
+
+function prepareStepText(step: IngestStep): StepText {
+  return {
+    name: prepareText(step.name, 1024).slice(0, NAME_LENGTH),
+    input: prepareText(step.input),
+    output: prepareText(step.output),
+    error: prepareText(step.error, MAX_STEP_ERROR_BYTES),
+  };
+}
+
+// What a step counts for against the workspace's storage limit.
+function storedBytes(text: StepText) {
+  return Buffer.byteLength(text.name) + Buffer.byteLength(text.input) + Buffer.byteLength(text.output) + Buffer.byteLength(text.error);
+}
+
+function buildStepUpsert(runId: Types.ObjectId, step: IngestStep, text: StepText, now: Date): AnyBulkWriteOperation {
   return {
     updateOne: {
       filter: { runId, index: step.index },
@@ -76,14 +104,14 @@ function buildStepUpsert(runId: Types.ObjectId, step: IngestStep, now: Date): An
       update: {
         $setOnInsert: {
           type: step.type,
-          name: prepareText(step.name, 1024).slice(0, NAME_LENGTH),
-          input: prepareText(step.input),
-          output: prepareText(step.output),
+          name: text.name,
+          input: text.input,
+          output: text.output,
           model: step.model.slice(0, MODEL_LENGTH),
           tokens: step.tokens,
           costUsd: step.costUsd,
           durationMs: step.durationMs,
-          error: prepareText(step.error, MAX_STEP_ERROR_BYTES),
+          error: text.error,
           startedAt: step.startedAt ?? now,
         },
       },
@@ -94,11 +122,6 @@ function buildStepUpsert(runId: Types.ObjectId, step: IngestStep, now: Date): An
 
 // Two batches creating the same run (or step) at the same instant: one of them hits the unique index.
 // Trying once more finds the document the other one made.
-function isDuplicateKeyError(err: unknown) {
-  const error = err as { code?: number; writeErrors?: Array<{ code?: number }> };
-  return error.code === 11000 || (Array.isArray(error.writeErrors) && error.writeErrors.length > 0 && error.writeErrors.every((item) => item.code === 11000));
-}
-
 async function bulkWriteOnce<T>(write: () => Promise<T>): Promise<T> {
   try {
     return await write();
@@ -156,6 +179,34 @@ async function refreshRunTotals(runIds: Types.ObjectId[]) {
   if (ops.length > 0) await Run.bulkWrite(ops, { ordered: false });
 }
 
+// The steps of this batch that are not saved yet. A step that already exists (a repeated batch) is left out,
+// and so is a second copy of the same step inside the batch (the first one wins, as it would when saving).
+async function pickNewSteps(steps: IngestStep[], runIdByExternalId: Map<string, Types.ObjectId>) {
+  const indexesByRun = new Map<string, { runId: Types.ObjectId; indexes: number[] }>();
+  for (const step of steps) {
+    const runId = runIdByExternalId.get(step.runId);
+    if (!runId) continue; // a run that does not exist yet has no saved steps
+    const entry = indexesByRun.get(step.runId) ?? { runId, indexes: [] };
+    entry.indexes.push(step.index);
+    indexesByRun.set(step.runId, entry);
+  }
+  const saved = new Set<string>();
+  if (indexesByRun.size > 0) {
+    const existing = await Step.find({ $or: [...indexesByRun.values()].map(({ runId, indexes }) => ({ runId, index: { $in: indexes } })) })
+      .select("runId index")
+      .lean();
+    for (const item of existing) saved.add(`${item.runId}:${item.index}`);
+  }
+  const seen = new Set<string>();
+  return steps.filter((step) => {
+    const key = `${step.runId}:${step.index}`;
+    const runId = runIdByExternalId.get(step.runId);
+    if (seen.has(key) || (runId && saved.has(`${runId}:${step.index}`))) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export async function ingestBatch(app: AppDoc, batch: IngestBatch): Promise<IngestResult> {
   const now = new Date();
 
@@ -164,24 +215,51 @@ export async function ingestBatch(app: AppDoc, batch: IngestBatch): Promise<Inge
   for (const run of batch.runs) updates.set(run.id, mergeRunUpdates(updates.get(run.id), run));
   for (const step of batch.steps) if (!updates.has(step.runId)) updates.set(step.runId, { id: step.runId });
 
-  await bulkWriteOnce(() => Run.bulkWrite([...updates.values()].map((update) => buildRunUpsert(app, update, now)), { ordered: false }));
-
+  // Before saving anything: how much new text is this batch, and does the workspace have room for it?
   // The filter always includes appId, so an app can only ever reach its own runs, whatever ids it sends.
-  const runs = await Run.find({ appId: app._id, externalId: { $in: [...updates.keys()] } })
+  const knownRuns = await Run.find({ appId: app._id, externalId: { $in: [...updates.keys()] } })
     .select("_id externalId")
     .lean();
-  const runIdByExternalId = new Map(runs.map((run) => [run.externalId as string, run._id]));
+  const newSteps = (await pickNewSteps(batch.steps, new Map(knownRuns.map((run) => [run.externalId as string, run._id])))).map((step) => ({
+    step,
+    text: prepareStepText(step),
+  }));
+  const newBytes = newSteps.reduce((total, { text }) => total + storedBytes(text), 0);
 
-  let newSteps = 0;
-  if (batch.steps.length > 0) {
-    const stepOps = batch.steps.flatMap((step) => {
-      const runId = runIdByExternalId.get(step.runId);
-      return runId ? [buildStepUpsert(runId, step, now)] : [];
-    });
-    const result = await bulkWriteOnce(() => Step.bulkWrite(stepOps, { ordered: false }));
-    newSteps = result.upsertedCount;
+  let reservedBytes = 0;
+  if (newBytes > 0) {
+    const workspace = await Workspace.findById(app.workspaceId).select("isDemo").lean();
+    const refusal = await reserveStorage(app.workspaceId, Boolean(workspace?.isDemo), newBytes, now);
+    if (refusal === "day") throw new TooManyRequestsError("This workspace has reached its storage limit for today.");
+    if (refusal === "total") throw new TooManyRequestsError("This workspace has reached its storage limit.");
+    reservedBytes = newBytes;
   }
 
-  await refreshRunTotals([...runIdByExternalId.values()]);
-  return { runs: updates.size, steps: batch.steps.length, newSteps };
+  try {
+    await bulkWriteOnce(() => Run.bulkWrite([...updates.values()].map((update) => buildRunUpsert(app, update, now)), { ordered: false }));
+
+    const runs = await Run.find({ appId: app._id, externalId: { $in: [...updates.keys()] } })
+      .select("_id externalId")
+      .lean();
+    const runIdByExternalId = new Map(runs.map((run) => [run.externalId as string, run._id]));
+
+    let savedSteps = 0;
+    if (newSteps.length > 0) {
+      const stepOps = newSteps.flatMap(({ step, text }) => {
+        const runId = runIdByExternalId.get(step.runId);
+        return runId ? [buildStepUpsert(runId, step, text, now)] : [];
+      });
+      if (stepOps.length > 0) {
+        const result = await bulkWriteOnce(() => Step.bulkWrite(stepOps, { ordered: false }));
+        savedSteps = result.upsertedCount;
+      }
+    }
+
+    await refreshRunTotals([...runIdByExternalId.values()]);
+    return { runs: updates.size, steps: batch.steps.length, newSteps: savedSteps };
+  } catch (err) {
+    // Nothing (or not everything) was saved, so the reserved room is given back.
+    if (reservedBytes > 0) await releaseStorage(app.workspaceId, reservedBytes, now).catch(() => undefined);
+    throw err;
+  }
 }

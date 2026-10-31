@@ -42,6 +42,12 @@ export class ConflictError extends AppError {
   }
 }
 
+export class TooManyRequestsError extends AppError {
+  constructor(message: string) {
+    super(429, message);
+  }
+}
+
 export class ServiceUnavailableError extends AppError {
   constructor(message: string) {
     super(503, message);
