@@ -1,0 +1,51 @@
+# One free Render web service for the whole site: the API and the website (client/dist) are served together.
+# Use it from Render: New + > Blueprint > pick this repository. Then fill in the values marked "sync: false".
+services:
+  - type: web
+    name: agentreplay
+    runtime: node
+    plan: free
+    region: singapore # closest to the Mumbai Atlas cluster
+    buildCommand: npm ci && npm run build
+    startCommand: npm start -w server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      # Atlas connection string for the "agentreplay" database. Secret: type it in Render, never in this file.
+      - key: MONGO_URI
+        sync: false
+      # Render makes a long random value for you.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: CLIENT_ORIGIN
+        value: https://agentreplay.sritaraksolutions.in
+      # The shared demo. It starts again from the refund story every hour.
+      - key: DEMO_MODE
+        value: "true"
+      - key: DEMO_AUTO_RESET
+        value: "true"
+      - key: AGENTGUARD_DEMO_URL
+        value: https://agentguard.sritaraksolutions.in
+      # AI settings. "demo" is the free scripted model: it needs no key and costs nothing.
+      # The demo workspace always uses it, even if you switch the provider later.
+      - key: LLM_PROVIDER
+        value: demo
+      - key: LLM_MODEL
+        value: ""
+      # Only for a paid provider: the models a fork may use (comma-separated). Empty = only LLM_MODEL.
+      - key: LLM_ALLOWED_MODELS
+        value: ""
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: ""
+      # What the provider charges, in US dollars per million tokens, so costs show. 0 = not known.
+      - key: LLM_INPUT_PRICE_PER_MILLION
+        value: "0"
+      - key: LLM_OUTPUT_PRICE_PER_MILLION
+        value: "0"
