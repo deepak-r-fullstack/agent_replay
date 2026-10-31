@@ -533,7 +533,7 @@ describe("when something goes wrong while running", () => {
     expect(byName["Quick test"]).toMatchObject({ outcome: "passed", change: "new" });
   });
 
-  it("stops a whole run that takes too long: tests it did not get to are marked as not run, and their room is given back", async () => {
+  it("stops a whole run that takes too long: nothing is saved as passed, and the room of tests that were never asked is given back", async () => {
     const team = await makeTeam("wrong-suite-time");
     const run = await makeRun(team);
     await TestCase.insertMany(Array.from({ length: 6 }, (_, index) => ({ workspaceId: team.workspaceId, name: `Test ${index}`, sourceRunId: run._id, sourceStepIndex: 1, input: "question", model: "demo-model", checks: [{ type: "contains", value: "answer" }] })));
@@ -541,13 +541,35 @@ describe("when something goes wrong while running", () => {
     const never = () => new Promise<never>(() => undefined);
     const started = Date.now();
     const result = await runSuite(new Types.ObjectId(team.workspaceId), {}, never, { callMs: 1000, suiteMs: 300 });
-    expect(Date.now() - started).toBeLessThan(2000);
-    // Five were in progress when time ran out; the sixth was never asked.
-    expect(result.summary).toMatchObject({ total: 6, notRun: 6 });
-    expect(result.results.filter((item) => item.outcome === "error")).toHaveLength(5);
-    const notAsked = result.results.find((item) => item.outcome === "skipped");
-    expect(notAsked!.error).toMatch(/ran out before this one was asked/);
-    expect(await callsToday(team)).toBe(5);
-    expect(await storageToday(team)).toBe(storageBefore + 5 * MAX_TEST_OUTPUT_BYTES);
+    expect(Date.now() - started).toBeLessThan(2000); // it stopped; it did not wait for calls that never answer
+    expect(result.summary).toMatchObject({ total: 6, notRun: 6, improved: 0, same: 0, worse: 0, new: 0 });
+    // Five tests were in progress when time ran out. The sixth was either never asked, or started with only a moment left
+    // and was stopped: both are fine, and neither is ever a pass.
+    const errors = result.results.filter((item) => item.outcome === "error");
+    const notAsked = result.results.filter((item) => item.outcome === "skipped");
+    expect(errors.length + notAsked.length).toBe(6);
+    expect(errors.length).toBeGreaterThanOrEqual(5);
+    expect(errors.every((item) => /took too long to answer/.test(item.error))).toBe(true);
+    // Only tests that were asked keep their share of today's AI calls and of the storage room.
+    expect(await callsToday(team)).toBe(6 - notAsked.length);
+    expect(await storageToday(team)).toBe(storageBefore + (6 - notAsked.length) * MAX_TEST_OUTPUT_BYTES);
+  });
+
+  it("asks nothing when there is no time left, and gives all of its room back", async () => {
+    const team = await makeTeam("wrong-no-time");
+    const run = await makeRun(team);
+    await TestCase.insertMany(Array.from({ length: 3 }, (_, index) => ({ workspaceId: team.workspaceId, name: `Test ${index}`, sourceRunId: run._id, sourceStepIndex: 1, input: "question", model: "demo-model", checks: [{ type: "contains", value: "answer" }] })));
+    const storageBefore = await storageToday(team);
+    const ask = jest.fn(async (request: llmClient.ChatRequest) => ({ text: "an answer", model: request.model, inputTokens: 1, outputTokens: 1 }));
+    const result = await runSuite(new Types.ObjectId(team.workspaceId), {}, ask, { callMs: 1000, suiteMs: 0 });
+    expect(ask).not.toHaveBeenCalled();
+    expect(result.results.every((item) => item.outcome === "skipped" && item.change === "not_run")).toBe(true);
+    expect(result.results[0].error).toMatch(/ran out before this one was asked/);
+    expect(result.summary).toMatchObject({ total: 3, notRun: 3 });
+    expect(await callsToday(team)).toBe(0);
+    expect(await storageToday(team)).toBe(storageBefore);
+    // Skipped tests are not failures: nothing is marked as passed or failed.
+    const tests = (await listTests(team)).body.data.tests;
+    expect(tests.every((test: { lastResult: { outcome: string } }) => test.lastResult.outcome === "skipped")).toBe(true);
   });
 });
