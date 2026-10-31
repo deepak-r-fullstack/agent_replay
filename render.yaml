@@ -6,7 +6,7 @@ services:
     runtime: node
     plan: free
     region: singapore # closest to the Mumbai Atlas cluster
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start -w server
     healthCheckPath: /api/health
     envVars:
