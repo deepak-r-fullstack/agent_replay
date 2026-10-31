@@ -1,7 +1,7 @@
 // The AgentReplay SDK. It has zero runtime dependencies on purpose: it runs inside
 // other people's apps, so it must stay tiny and can never be a reason their app breaks.
 //
-//   import { init, startRun } from "agentreplay";
+//   import { init, startRun } from "@sritarak/agentreplay";
 //   init();                                   // reads AGENTREPLAY_API_KEY
 //   const run = startRun({ name: "Support chat" });
 //   await run.trace("tool", "lookup_order", () => lookupOrder(id), { input: { id } });

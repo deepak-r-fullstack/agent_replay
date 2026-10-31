@@ -49,3 +49,13 @@ export const MAX_BYTES_PER_WORKSPACE_TOTAL = 100 * 1024 * 1024;
 export const STORAGE_TOTAL_KEY = "total";
 // Daily counters tidy themselves away after this long.
 export const STORAGE_COUNTER_KEEP_DAYS = 40;
+
+// ---------- showing runs ----------
+
+// What a person sees for a run: its saved status, or "unfinished" for a run that says "running" but has gone quiet.
+export const DISPLAY_STATUSES = [...RUN_STATUSES, "unfinished"] as const;
+export type DisplayStatus = (typeof DISPLAY_STATUSES)[number];
+// A run still "running" with no update for this long is shown as "unfinished". Only the display changes, never the saved run.
+export const UNFINISHED_AFTER_MS = 60 * 60 * 1000;
+export const DEFAULT_RUNS_PAGE_SIZE = 20;
+export const MAX_RUNS_PAGE_SIZE = 50;

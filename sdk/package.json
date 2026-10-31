@@ -1,5 +1,5 @@
 {
-  "name": "agentreplay",
+  "name": "@sritarak/agentreplay",
   "version": "0.1.0",
   "description": "Record every step of an AI run and replay it in AgentReplay.",
   "license": "MIT",
@@ -9,8 +9,12 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand"
   },

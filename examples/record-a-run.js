@@ -5,7 +5,7 @@
 //   2. In AgentReplay, open "Apps and keys", add an app, and copy its key.
 //   3. AGENTREPLAY_API_KEY=ar_... AGENTREPLAY_URL=http://localhost:5050 node examples/record-a-run.js
 
-const { init, startRun, flush } = require("agentreplay");
+const { init, startRun, flush } = require("@sritarak/agentreplay");
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

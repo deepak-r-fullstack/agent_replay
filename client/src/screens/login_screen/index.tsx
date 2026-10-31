@@ -26,7 +26,7 @@ export const LoginScreen = () => {
     try {
       const response = await request();
       setSession(response.data.token, response.data.user);
-      navigate("/apps", { replace: true });
+      navigate("/runs", { replace: true });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

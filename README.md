@@ -7,9 +7,9 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 | Milestone | What | Status |
 | --- | --- | --- |
 | 1 | Foundation: sign-up, sign-in, apps and SDK keys, CI | done |
-| 2 | SDK and ingest | in review |
-| 3 | Runs list and replay screens | next |
-| 4 | Fork and re-run | |
+| 2 | SDK and ingest | done |
+| 3 | Runs list and replay screens | in review |
+| 4 | Fork and re-run | next |
 | 5 | Tests and suites | |
 | 6 | Demo data, docs, deploy | |
 
@@ -23,12 +23,13 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 - Seed data that tells the refund story (wrong amount, fork at step 3, fixed, save as test).
 - README screenshots and the 3-minute demo script, `render.yaml`, SDK ready to publish.
 - **Protect the shared demo workspace.** Every demo visitor shares one workspace, so one visitor can change what the next one sees. Plan a regular demo reset, or protect the seeded items: seeded apps cannot be revoked or rotated, and some app slots stay free so visitors can always add one.
+- **Before deploy, add one global storage limit across all workspaces (250 MB), because new workspaces are free to create and the Atlas cluster is shared with AgentGuard.**
 - **Reset the demo's storage counters with its clean-up.** The demo workspace's all-time storage counter (`storage_usage`, day `total`) only goes up. When old demo runs are deleted, lower or reset that counter too, or the demo will stop accepting new steps after about 20 days of full use.
 
 ## What is in the repo
 
 ```
-sdk/      the "agentreplay" npm package (no runtime dependencies)
+sdk/      the "@sritarak/agentreplay" npm package (no runtime dependencies)
 examples/ small scripts that use the SDK
 server/   Node 22 + Express + MongoDB API
 client/   React + Vite + Tailwind website
@@ -56,7 +57,7 @@ npm run build -w sdk
 AGENTREPLAY_API_KEY=ar_your_key AGENTREPLAY_URL=http://localhost:5050 node examples/record-a-run.js
 ```
 
-The run is saved on the server now; the screens that show it arrive in milestone 3. See [`sdk/README.md`](sdk/README.md) for how to use the SDK in your own app.
+Open **Runs** in AgentReplay to see it: click the run to replay it step by step. See [`sdk/README.md`](sdk/README.md) for how to use the SDK in your own app.
 
 ## Checks
 

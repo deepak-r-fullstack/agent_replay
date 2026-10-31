@@ -4,6 +4,8 @@ import { DisplayToasts } from "components/display_components";
 import { useAuthStore } from "utils/store/authStore";
 import { LoginScreen } from "screens/login_screen";
 import { AppsScreen } from "screens/apps_screen";
+import { RunsScreen } from "screens/runs_screen";
+import { RunReplayScreen } from "screens/run_replay_screen";
 
 export const App = () => {
   const token = useAuthStore((state) => state.token);
@@ -13,8 +15,10 @@ export const App = () => {
       {token ? (
         <Routes>
           <Route element={<AppLayout />}>
+            <Route path="/runs" element={<RunsScreen />} />
+            <Route path="/runs/:id" element={<RunReplayScreen />} />
             <Route path="/apps" element={<AppsScreen />} />
-            <Route path="*" element={<Navigate to="/apps" replace />} />
+            <Route path="*" element={<Navigate to="/runs" replace />} />
           </Route>
         </Routes>
       ) : (
