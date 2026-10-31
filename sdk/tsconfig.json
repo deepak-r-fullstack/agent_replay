@@ -12,7 +12,16 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
-    "types": ["node"]
+    "types": [
+      "node",
+      "jest"
+    ],
+    "lib": [
+      "ES2021"
+    ]
   },
-  "include": ["src"]
+  "include": [
+    "src",
+    "tests"
+  ]
 }

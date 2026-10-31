@@ -2,18 +2,31 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { env, isTest } from "../config/env";
 import { asyncHandler } from "../helpers/asyncHandler";
-import { authenticateUser, authorizeRoles } from "../middlewares/auth.middleware";
+import { authenticateApp, authenticateUser, authorizeRoles } from "../middlewares/auth.middleware";
 import { validateRequest } from "../middlewares/validateRequest.middleware";
 import { NotFoundError } from "../helpers/errors";
 
 import * as authController from "../controllers/auth.controller";
 import * as appsController from "../controllers/apps.controller";
+import * as ingestController from "../controllers/ingest.controller";
 
 const router = Router();
 
 // Rate limits: slow down password guessing and account-creation floods.
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: isTest ? 1000 : 20, standardHeaders: true, legacyHeaders: false });
 const signupLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: isTest ? 1000 : 10, standardHeaders: true, legacyHeaders: false });
+
+// Ingest: first a loose limit per address (stops floods of bad keys), then a limit per app once its key is known.
+// The SDK sends about one request every 2 seconds, so the per-app limit leaves plenty of room.
+const ingestAddressLimiter = rateLimit({ windowMs: 60 * 1000, limit: isTest ? 100000 : 300, standardHeaders: true, legacyHeaders: false });
+const ingestAppLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: isTest ? 100000 : 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (_req, res) => String(res.locals.app?._id),
+  message: { success: false, message: "This app is sending too fast. Please slow down and try again in a minute." },
+});
 
 const demoOnly = (_req: unknown, _res: unknown, next: (err?: unknown) => void) =>
   env.DEMO_MODE ? next() : next(new NotFoundError("The demo is turned off."));
@@ -39,5 +52,15 @@ router.post(
 );
 router.post("/apps/:id/rotate-key", authenticateUser, authorizeRoles("owner", "developer"), asyncHandler(appsController.rotateKey));
 router.post("/apps/:id/revoke-key", authenticateUser, authorizeRoles("owner", "developer"), asyncHandler(appsController.revokeKey));
+
+// ---------- apps: the SDK sends recorded runs here ----------
+router.post(
+  "/ingest",
+  ingestAddressLimiter,
+  authenticateApp,
+  ingestAppLimiter,
+  validateRequest(ingestController.ingestBatchSchema),
+  asyncHandler(ingestController.receiveBatch)
+);
 
 export default router;
