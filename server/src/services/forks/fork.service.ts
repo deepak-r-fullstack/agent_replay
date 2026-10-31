@@ -1,17 +1,25 @@
 import { Types } from "mongoose";
-import { FORK_NAME_SUFFIX, MAX_LLM_STEPS_PER_FORK, MAX_STEP_ERROR_BYTES, StepOrigin } from "../../constants";
-import { BadRequestError, NotFoundError } from "../../helpers/errors";
+import { AI_CALL_TIMEOUT_MS, FORK_NAME_SUFFIX, FORK_TIME_LIMIT_MS, MAX_LLM_STEPS_PER_FORK, MAX_STEP_ERROR_BYTES, StepOrigin } from "../../constants";
+import { BadRequestError, NotFoundError, ServiceUnavailableError, TooManyRequestsError } from "../../helpers/errors";
 import { Run, RunDoc } from "../../models/run.model";
 import { Step, StepDoc } from "../../models/step.model";
+import { Workspace } from "../../models/workspace.model";
 import { prepareText } from "../../utils/text";
+import { withTimeout } from "../../utils/timeouts";
 import { assertStorageRoom, releaseStorage } from "../ingest/storageQuota.service";
-import { ChatResult, completeChat } from "../llm/llmClient";
+import { ChatOptions, ChatRequest, ChatResult, completeChat, resolveModel, usesDemoProvider } from "../llm/llmClient";
+import { releaseForkSlot, reserveForkSlot } from "./forkQuota.service";
 import { applyPromptEdit, applyReplacements, chatRequestFrom, Replacement } from "./forkText";
 
 // A fork is a new run that starts from a step of an existing run:
 //   - steps BEFORE the chosen step are copied from the original
 //   - AI ("llm") steps from the chosen step onwards are asked again through the AI model
 //   - every other step (tool, lookup, custom) is NEVER run. Its recorded result is reused, or the result a person typed.
+// Every fork is also held to cost limits, because anyone can start one (including demo visitors):
+//   - the demo workspace always uses the free scripted model, whatever LLM_PROVIDER says
+//   - with a paid provider only allowed models are used (see resolveModel)
+//   - a daily limit of forks per workspace, taken before any AI call and given back if the fork does not finish
+//   - each AI call may take 30 seconds and the whole fork 90; past that nothing is saved and nothing is counted
 // There is no code in this file that runs a tool: only AI steps reach the AI model, and everything else is copied.
 // The original run and its steps are only ever read.
 
@@ -42,8 +50,20 @@ interface PlannedStep {
   error: string;
   startedAt: Date;
   origin: StepOrigin;
+  note?: string;
   externalRef?: LeanStep["externalRef"];
 }
+
+export interface ForkLimits {
+  callMs: number; // one AI call
+  forkMs: number; // the whole fork
+}
+
+const CALL_TOO_LONG = () => new ServiceUnavailableError(`The AI took too long to answer (over ${Math.round(AI_CALL_TIMEOUT_MS / 1000)} seconds), so the fork was stopped. Nothing was saved. Please try again.`);
+const FORK_TOO_LONG = () =>
+  new ServiceUnavailableError(`This fork took too long (over ${Math.round(FORK_TIME_LIMIT_MS / 1000)} seconds), so it was stopped. Nothing was saved. Try forking from a later step, so fewer AI steps are asked again.`);
+
+type Ask = (request: ChatRequest, options?: ChatOptions) => Promise<ChatResult>;
 
 function checkEdits(steps: LeanStep[], input: ForkInput) {
   const byIndex = new Map(steps.map((step) => [step.index, step]));
@@ -63,7 +83,7 @@ function checkEdits(steps: LeanStep[], input: ForkInput) {
 
 // Builds every step of the fork, in order. AI steps are asked one after another, because a later question can
 // quote an earlier answer.
-async function planSteps(steps: LeanStep[], input: ForkInput, ask: (request: Parameters<typeof completeChat>[0]) => Promise<ChatResult>) {
+async function planSteps(steps: LeanStep[], input: ForkInput, ask: Ask, forceDemo: boolean, limits: ForkLimits, deadline: number) {
   const replacements: Replacement[] = [];
   const planned: PlannedStep[] = [];
 
@@ -90,9 +110,14 @@ async function planSteps(steps: LeanStep[], input: ForkInput, ask: (request: Par
 
     if (step.type === "llm") {
       if (edit.prompt !== undefined) stepInput = applyPromptEdit(stepInput, edit.prompt);
-      const model = edit.model ?? step.model;
+      // A model that is not allowed here is replaced, and the step says so.
+      const { model, note } = resolveModel(edit.model ?? step.model, forceDemo);
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw FORK_TOO_LONG();
+      // One call may take 30 seconds, but never longer than what is left of the whole fork's time.
+      const callMs = Math.min(limits.callMs, remaining);
       const started = Date.now();
-      const answer = await ask({ model, ...chatRequestFrom(stepInput) });
+      const answer = await withTimeout(ask({ model, ...chatRequestFrom(stepInput) }, { forceDemo, timeoutMs: callMs }), callMs, callMs < limits.callMs ? FORK_TOO_LONG : CALL_TOO_LONG);
       const output = prepareText(answer.text);
       if (output !== step.output) replacements.push({ from: step.output, to: output });
       planned.push({
@@ -106,6 +131,7 @@ async function planSteps(steps: LeanStep[], input: ForkInput, ask: (request: Par
         startedAt: new Date(),
         error: "",
         origin: "rerun",
+        note,
       });
       continue;
     }
@@ -126,7 +152,8 @@ async function planSteps(steps: LeanStep[], input: ForkInput, ask: (request: Par
 const textBytes = (step: PlannedStep) => Buffer.byteLength(step.name) + Buffer.byteLength(step.input) + Buffer.byteLength(step.output) + Buffer.byteLength(step.error);
 
 // Returns the new run. Nothing is saved if anything fails.
-export async function forkRun(workspaceId: Types.ObjectId, runId: string, input: ForkInput, ask = completeChat) {
+export async function forkRun(workspaceId: Types.ObjectId, runId: string, input: ForkInput, ask: Ask = completeChat, limits: ForkLimits = { callMs: AI_CALL_TIMEOUT_MS, forkMs: FORK_TIME_LIMIT_MS }) {
+  const startedAt = Date.now();
   const original = await Run.findOne({ _id: runId, workspaceId }).lean<RunDoc & { _id: Types.ObjectId }>();
   if (!original) throw new NotFoundError("That run was not found.");
 
@@ -140,46 +167,61 @@ export async function forkRun(workspaceId: Types.ObjectId, runId: string, input:
     throw new BadRequestError(`This fork would ask the AI ${askedAgain} times. The limit is ${MAX_LLM_STEPS_PER_FORK}. Fork from a later step.`);
   }
 
-  // May throw 503 when the AI model cannot be reached: then nothing has been saved and nothing has been counted.
-  const planned = await planSteps(steps, input, ask);
+  // The demo workspace is open to anyone, so it never reaches a paid provider.
+  const workspace = await Workspace.findById(workspaceId).select("isDemo").lean();
+  const forceDemo = Boolean(workspace?.isDemo);
 
-  // Forks use the same storage room as recorded runs.
+  // One of today's forks is taken BEFORE any AI call, so a burst of requests cannot run up the bill.
+  // Everything below that fails gives it back, so a fork that was not made is not counted.
   const now = new Date();
-  const bytes = planned.reduce((total, step) => total + textBytes(step), 0);
-  await assertStorageRoom(workspaceId, bytes, now);
+  if (!(await reserveForkSlot(workspaceId, usesDemoProvider(forceDemo), now))) {
+    throw new TooManyRequestsError("This workspace has used today's forks. Try again tomorrow.");
+  }
 
-  const failed = planned.some((step) => step.error);
-  const durationMs = planned.reduce((total, step) => total + step.durationMs, 0);
-  let forkId: Types.ObjectId | null = null;
   try {
-    const fork = await Run.create({
-      workspaceId,
-      appId: original.appId,
-      name: `${original.name}${FORK_NAME_SUFFIX}`.slice(0, 120),
-      status: failed ? "failed" : "ok",
-      userRef: original.userRef,
-      model: planned.find((step) => step.type === "llm" && step.model)?.model ?? "",
-      totalTokens: planned.reduce((total, step) => total + step.tokens, 0),
-      costUsd: planned.reduce((total, step) => total + step.costUsd, 0),
-      durationMs,
-      reportedDurationMs: durationMs,
-      stepCount: planned.length,
-      tags: original.tags,
-      parentRunId: original._id,
-      forkedFromStepId: forkPoint._id,
-      startedAt: now,
-      lastActivityAt: now,
-    });
-    forkId = fork._id;
-    await Step.insertMany(planned.map((step) => ({ ...step, runId: fork._id, error: prepareText(step.error, MAX_STEP_ERROR_BYTES) })));
-    return fork;
-  } catch (err) {
-    // Not everything was saved: remove what was, and give the storage room back.
-    if (forkId) {
-      await Step.deleteMany({ runId: forkId }).catch(() => undefined);
-      await Run.deleteOne({ _id: forkId }).catch(() => undefined);
+    // May throw 503 when the AI model cannot be reached or takes too long: then nothing has been saved or counted.
+    const planned = await withTimeout(planSteps(steps, input, ask, forceDemo, limits, startedAt + limits.forkMs), Math.max(1, startedAt + limits.forkMs - Date.now()), FORK_TOO_LONG);
+
+    // Forks use the same storage room as recorded runs.
+    const bytes = planned.reduce((total, step) => total + textBytes(step), 0);
+    await assertStorageRoom(workspaceId, bytes, now);
+
+    const failed = planned.some((step) => step.error);
+    const durationMs = planned.reduce((total, step) => total + step.durationMs, 0);
+    let forkId: Types.ObjectId | null = null;
+    try {
+      const fork = await Run.create({
+        workspaceId,
+        appId: original.appId,
+        name: `${original.name}${FORK_NAME_SUFFIX}`.slice(0, 120),
+        status: failed ? "failed" : "ok",
+        userRef: original.userRef,
+        model: planned.find((step) => step.type === "llm" && step.model)?.model ?? "",
+        totalTokens: planned.reduce((total, step) => total + step.tokens, 0),
+        costUsd: planned.reduce((total, step) => total + step.costUsd, 0),
+        durationMs,
+        reportedDurationMs: durationMs,
+        stepCount: planned.length,
+        tags: original.tags,
+        parentRunId: original._id,
+        forkedFromStepId: forkPoint._id,
+        startedAt: now,
+        lastActivityAt: now,
+      });
+      forkId = fork._id;
+      await Step.insertMany(planned.map((step) => ({ ...step, runId: fork._id, error: prepareText(step.error, MAX_STEP_ERROR_BYTES) })));
+      return fork;
+    } catch (err) {
+      // Not everything was saved: remove what was, and give the storage room back.
+      if (forkId) {
+        await Step.deleteMany({ runId: forkId }).catch(() => undefined);
+        await Run.deleteOne({ _id: forkId }).catch(() => undefined);
+      }
+      await releaseStorage(workspaceId, bytes, now).catch(() => undefined);
+      throw err;
     }
-    await releaseStorage(workspaceId, bytes, now).catch(() => undefined);
+  } catch (err) {
+    await releaseForkSlot(workspaceId, now).catch(() => undefined);
     throw err;
   }
 }

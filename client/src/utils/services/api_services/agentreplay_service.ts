@@ -29,6 +29,7 @@ export const runService = {
     unwrap<RunsPage>(apiClient.get("/runs", { params: { ...filters, page } })),
   get: (id: string) => unwrap<RunDetail>(apiClient.get(`/runs/${id}`)),
   step: (id: string, index: number) => unwrap<StepDetail>(apiClient.get(`/runs/${id}/steps/${index}`)),
-  fork: (id: string, input: ForkInput) => unwrap<{ run: RunSummary }>(apiClient.post(`/runs/${id}/fork`, input)),
+  // A fork asks the AI model, and the server gives it up to 90 seconds, so this waits a little longer than that.
+  fork: (id: string, input: ForkInput) => unwrap<{ run: RunSummary }>(apiClient.post(`/runs/${id}/fork`, input, { timeout: 100_000 })),
   compare: (forkId: string) => unwrap<RunComparison>(apiClient.get(`/runs/${forkId}/compare`)),
 };

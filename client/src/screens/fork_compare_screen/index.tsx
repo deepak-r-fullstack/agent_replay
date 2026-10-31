@@ -71,6 +71,11 @@ const ChangedRow = ({ row, originalId, forkId, answerShownAbove }: { row: Compar
         </span>
         {origin && <span className="rounded-full bg-brand-tint px-2 py-0.5 text-xs font-semibold text-brand">{origin.label}</span>}
       </p>
+      {row.fork?.note && (
+        <p className="mt-2 rounded-md border border-waiting/30 bg-waiting-tint px-3 py-2 text-sm text-waiting" role="note">
+          {row.fork.note}
+        </p>
+      )}
       {answerShownAbove ? (
         <p className="mt-2 text-sm text-ink-soft">The answer above comes from this step.</p>
       ) : (

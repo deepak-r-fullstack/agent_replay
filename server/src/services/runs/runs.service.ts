@@ -23,10 +23,11 @@ export interface StepOutline {
   durationMs: number;
   startedAt: Date;
   origin: string;
+  note: string;
   failed: boolean;
 }
 
-export const STEP_OUTLINE_PROJECTION = { _id: 0, index: 1, type: 1, name: 1, model: 1, tokens: 1, costUsd: 1, durationMs: 1, startedAt: 1, origin: { $ifNull: ["$origin", "recorded"] }, failed: { $ne: ["$error", ""] } };
+export const STEP_OUTLINE_PROJECTION = { _id: 0, index: 1, type: 1, name: 1, model: 1, tokens: 1, costUsd: 1, durationMs: 1, startedAt: 1, origin: { $ifNull: ["$origin", "recorded"] }, note: { $ifNull: ["$note", ""] }, failed: { $ne: ["$error", ""] } };
 
 export interface RunListFilters {
   status?: DisplayStatus;
@@ -165,6 +166,7 @@ export async function getStepDetail(workspaceId: Types.ObjectId, runId: string, 
     error: step.error,
     startedAt: step.startedAt,
     origin: step.origin ?? "recorded",
+    note: step.note ?? "",
     // What a person edits when forking an AI step: the last thing the AI was asked.
     editablePrompt: step.type === "llm" ? editablePromptOf(step.input) : null,
     // Shown as a link, so it is checked again here, whatever was saved before.

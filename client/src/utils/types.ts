@@ -98,6 +98,8 @@ export interface StepOutline {
   durationMs: number;
   startedAt: string;
   origin: StepOrigin;
+  // A short plain-words note, for example that a fork used a different AI model than the one asked for.
+  note: string;
   failed: boolean;
 }
 

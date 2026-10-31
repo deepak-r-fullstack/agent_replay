@@ -102,6 +102,12 @@ export const StepDetailPanel = ({ runId, index, onFork }: { runId: string; index
         </p>
       )}
 
+      {step.note && (
+        <p className="mt-4 rounded-lg border border-waiting/30 bg-waiting-tint px-4 py-3 text-sm text-waiting" role="note">
+          {step.note}
+        </p>
+      )}
+
       {step.error && (
         <div className="mt-4 rounded-lg border border-refused/30 bg-refused-tint px-4 py-3 text-refused" role="alert">
           <p className="font-semibold">This step failed</p>

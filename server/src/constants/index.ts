@@ -71,6 +71,15 @@ export const STEP_ORIGINS = ["recorded", "copied", "rerun", "simulated", "edited
 export type StepOrigin = (typeof STEP_ORIGINS)[number];
 
 export const MAX_LLM_STEPS_PER_FORK = 20; // each one is a call to the AI model, which can cost money
+
+// ---------- keeping AI costs under control ----------
+// A fork asks an AI model, and with a real provider that costs the owner money. Anyone can start forks,
+// including visitors to the demo, so every fork is capped in how long, how often and how big.
+export const MAX_ANSWER_TOKENS = 1500; // the longest answer one AI call may give
+export const AI_CALL_TIMEOUT_MS = 30_000; // one AI call
+export const FORK_TIME_LIMIT_MS = 90_000; // a whole fork, all its AI calls together
+export const MAX_FORKS_PER_DAY_REAL_PROVIDER = 30; // per workspace, per UTC day, when forks use a paid AI provider
+export const MAX_FORKS_PER_DAY_DEMO_PROVIDER = 100; // the free scripted demo model costs nothing, so the limit is higher
 export const MAX_FORK_EDITS = 50;
 export const FORK_NAME_SUFFIX = " (fork)";
 // Only text at least this long is swapped into later steps; a short answer like "ok" would match too much.
