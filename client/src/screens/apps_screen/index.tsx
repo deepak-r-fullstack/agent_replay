@@ -20,13 +20,13 @@ const copyText = async (text: string, doneMessage: string) => {
 // Shown right after a key is made. The key cannot be shown again, so this card says so clearly.
 const NewKeyCard = ({ app, onDone }: { app: AppWithKey; onDone: () => void }) => {
   const setup = [
-    "npm install agentreplay",
+    "npm install @sritarak/agentreplay",
     "",
     "# 1. Put this in your app's environment settings:",
     `AGENTREPLAY_API_KEY=${app.apiKey}`,
     "",
     "# 2. Then, in your code:",
-    'import { init, startRun } from "agentreplay";',
+    'import { init, startRun } from "@sritarak/agentreplay";',
     "init();",
     'const run = startRun({ name: "My first run" });',
     'run.step({ name: "hello", input: "Hi", output: "Hello!" });',

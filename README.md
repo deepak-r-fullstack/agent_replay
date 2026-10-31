@@ -29,7 +29,7 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 ## What is in the repo
 
 ```
-sdk/      the "agentreplay" npm package (no runtime dependencies)
+sdk/      the "@sritarak/agentreplay" npm package (no runtime dependencies)
 examples/ small scripts that use the SDK
 server/   Node 22 + Express + MongoDB API
 client/   React + Vite + Tailwind website

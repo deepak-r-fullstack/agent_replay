@@ -1,13 +1,13 @@
-# agentreplay
+# @sritarak/agentreplay
 
 Record every step of an AI run and replay it in [AgentReplay](https://agentreplay.sritaraksolutions.in): see what your AI did and why, try a fix from any step, and turn a failure into a test.
 
 ```bash
-npm install agentreplay
+npm install @sritarak/agentreplay
 ```
 
 ```ts
-import { init, startRun } from "agentreplay";
+import { init, startRun } from "@sritarak/agentreplay";
 
 init(); // reads AGENTREPLAY_API_KEY (and AGENTREPLAY_URL, if you host AgentReplay yourself)
 
@@ -27,7 +27,7 @@ Get your key from **Apps and keys** in AgentReplay. Set it as `AGENTREPLAY_API_K
 ## Record OpenAI or Anthropic calls without changing your code
 
 ```ts
-import { wrapOpenAI, wrapAnthropic } from "agentreplay";
+import { wrapOpenAI, wrapAnthropic } from "@sritarak/agentreplay";
 
 const ai = wrapOpenAI(new OpenAI(), run, { price: { inputPerMillion: 0.15, outputPerMillion: 0.6 } });
 const answer = await ai.chat.completions.create({ model: "gpt-4o-mini", messages }); // recorded as an AI step
