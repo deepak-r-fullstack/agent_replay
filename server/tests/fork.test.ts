@@ -1,7 +1,7 @@
 import request from "supertest";
 import { Types } from "mongoose";
 import { createApp } from "../src/app";
-import { MAX_LLM_STEPS_PER_FORK, MAX_BYTES_PER_WORKSPACE_PER_DAY } from "../src/constants";
+import { MAX_LLM_STEPS_PER_FORK, MAX_BYTES_PER_WORKSPACE_PER_DAY, RUN_STORAGE_BYTES } from "../src/constants";
 import { ServiceUnavailableError } from "../src/helpers/errors";
 import { Run } from "../src/models/run.model";
 import { StorageUsage } from "../src/models/storageUsage.model";
@@ -378,7 +378,7 @@ describe("storage", () => {
     const res = await fork(team.token, original._id, fix);
     const stored = await stepsOf(res.body.data.run.id);
     const bytes = stored.reduce((total, step) => total + Buffer.byteLength(step.name) + Buffer.byteLength(step.input) + Buffer.byteLength(step.output) + Buffer.byteLength(step.error), 0);
-    expect((await StorageUsage.findOne({ workspaceId: team.workspaceId, day: today }).lean())!.bytes).toBe(before + bytes);
+    expect((await StorageUsage.findOne({ workspaceId: team.workspaceId, day: today }).lean())!.bytes).toBe(before + bytes + RUN_STORAGE_BYTES); // the fork run itself counts 1 KB
   });
 
   it("refuses with a friendly 429 when there is no room, and saves nothing", async () => {

@@ -45,6 +45,8 @@ export const UNTITLED_RUN_NAME = "Untitled run";
 export const MAX_BYTES_PER_WORKSPACE_PER_DAY = 20 * 1024 * 1024;
 export const MAX_BYTES_PER_DEMO_WORKSPACE_PER_DAY = 5 * 1024 * 1024; // the demo is open to anyone, so it gets less
 export const MAX_BYTES_PER_WORKSPACE_TOTAL = 100 * 1024 * 1024;
+// Every new run (recorded or forked) counts this much too, so runs with no steps cannot get around the limits.
+export const RUN_STORAGE_BYTES = 1024;
 // The counter key that holds a workspace's all-time total (the daily counters use the date, for example "2026-10-31").
 export const STORAGE_TOTAL_KEY = "total";
 // Daily counters tidy themselves away after this long.

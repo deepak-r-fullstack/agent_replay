@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { AI_CALL_TIMEOUT_MS, FORK_NAME_SUFFIX, FORK_TIME_LIMIT_MS, MAX_LLM_STEPS_PER_FORK, MAX_STEP_ERROR_BYTES, StepOrigin } from "../../constants";
+import { AI_CALL_TIMEOUT_MS, FORK_NAME_SUFFIX, FORK_TIME_LIMIT_MS, MAX_LLM_STEPS_PER_FORK, MAX_STEP_ERROR_BYTES, RUN_STORAGE_BYTES, StepOrigin } from "../../constants";
 import { BadRequestError, NotFoundError, ServiceUnavailableError, TooManyRequestsError } from "../../helpers/errors";
 import { Run, RunDoc } from "../../models/run.model";
 import { Step, StepDoc } from "../../models/step.model";
@@ -193,8 +193,8 @@ export async function forkRun(workspaceId: Types.ObjectId, runId: string, input:
     // May throw 503 when the AI model cannot be reached or takes too long: then nothing has been saved or counted.
     const planned = await withTimeout(planSteps(steps, input, askAndNotice, forceDemo, limits, startedAt + limits.forkMs), Math.max(1, startedAt + limits.forkMs - Date.now()), FORK_TOO_LONG);
 
-    // Forks use the same storage room as recorded runs.
-    const bytes = planned.reduce((total, step) => total + textBytes(step), 0);
+    // Forks use the same storage room as recorded runs (the new run itself counts too).
+    const bytes = planned.reduce((total, step) => total + textBytes(step), RUN_STORAGE_BYTES);
     await assertStorageRoom(workspaceId, bytes, now);
 
     const failed = planned.some((step) => step.error);

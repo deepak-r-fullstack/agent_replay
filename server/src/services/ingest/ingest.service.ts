@@ -1,5 +1,5 @@
 import { AnyBulkWriteOperation, Types } from "mongoose";
-import { EXTERNAL_REF_ID_MAX, MAX_STEP_ERROR_BYTES, UNTITLED_RUN_NAME } from "../../constants";
+import { EXTERNAL_REF_ID_MAX, MAX_STEP_ERROR_BYTES, RUN_STORAGE_BYTES, UNTITLED_RUN_NAME } from "../../constants";
 import { AppDoc } from "../../models/app.model";
 import { Run } from "../../models/run.model";
 import { Step } from "../../models/step.model";
@@ -224,7 +224,10 @@ export async function ingestBatch(app: AppDoc, batch: IngestBatch): Promise<Inge
     step,
     text: prepareStepText(step),
   }));
-  const newBytes = newSteps.reduce((total, { text }) => total + storedBytes(text), 0);
+  // A run this batch creates counts a little too, even when it has no steps.
+  const knownIds = new Set(knownRuns.map((run) => run.externalId as string));
+  const newRunCount = [...updates.keys()].filter((id) => !knownIds.has(id)).length;
+  const newBytes = newSteps.reduce((total, { text }) => total + storedBytes(text), 0) + newRunCount * RUN_STORAGE_BYTES;
 
   let reservedBytes = 0;
   if (newBytes > 0) {
