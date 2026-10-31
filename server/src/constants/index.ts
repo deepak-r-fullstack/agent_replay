@@ -18,4 +18,6 @@ export const API_KEY_PREFIX = "ar_";
 export const DEMO_WORKSPACE_SLUG = "demo-acme-support";
 export const DEMO_WORKSPACE_NAME = "Acme Support (demo)";
 export const DEMO_USER_EMAIL = "demo@agentreplay.test";
+// Nobody may sign up with an address on this domain, so no real account can ever look like the demo's.
+export const RESERVED_EMAIL_SUFFIX = "@agentreplay.test";
 export const DEMO_USER_NAME = "Demo Visitor";

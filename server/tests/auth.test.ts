@@ -2,6 +2,7 @@ import request from "supertest";
 import { createApp } from "../src/app";
 import { User } from "../src/models/user.model";
 import { Workspace } from "../src/models/workspace.model";
+import { hashPassword } from "../src/services/auth/auth.service";
 import { startTestDb, stopTestDb } from "./helpers/testDb";
 
 // Health, sign-up, sign-in and the demo button, end to end through the real HTTP API
@@ -69,6 +70,16 @@ describe("sign up", () => {
     expect(new Set(workspaces.map((workspace) => workspace.slug)).size).toBe(workspaces.length);
   });
 
+  it.each(["demo@agentreplay.test", "DEMO@AgentReplay.Test", "anyone@agentreplay.test"])("refuses the reserved demo address %s", async (email) => {
+    const workspacesBefore = await Workspace.countDocuments();
+    const res = await request(app).post("/api/auth/signup").send({ ...validSignup, email });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe("This email address can't be used. Please use your own email.");
+    expect(await User.countDocuments({ email: email.toLowerCase() })).toBe(0);
+    // The refused attempt must not leave a workspace behind either.
+    expect(await Workspace.countDocuments()).toBe(workspacesBefore);
+  });
+
   it.each([
     ["a short password", { password: "short" }],
     ["a bad email", { email: "not-an-email" }],
@@ -132,5 +143,30 @@ describe("try the demo", () => {
   it("cannot be used to sign in with a password", async () => {
     const res = await request(app).post("/api/auth/login").send({ email: "demo@agentreplay.test", password: "anything-at-all" });
     expect(res.status).toBe(401);
+  });
+
+  it("never signs anyone in as a user outside the demo workspace, even one with the demo email", async () => {
+    // Worst case: the demo email already belongs to a real workspace (for example from before sign-up blocked it).
+    await User.deleteOne({ email: "demo@agentreplay.test" });
+    const outside = await Workspace.create({ name: "Not the demo", slug: "not-the-demo" });
+    await User.create({
+      workspaceId: outside._id,
+      name: "Squatter",
+      email: "demo@agentreplay.test",
+      role: "owner",
+      passwordHash: await hashPassword("a-good-password"),
+    });
+
+    const res = await request(app).post("/api/auth/demo");
+    expect(res.status).toBe(503);
+    expect(res.body.data).toBeUndefined();
+    expect(JSON.stringify(res.body)).not.toMatch(/token|Squatter|Not the demo/);
+
+    // Clean up so the demo works again for anything that runs after this test.
+    await User.deleteOne({ email: "demo@agentreplay.test" });
+    await Workspace.deleteOne({ _id: outside._id });
+    const again = await request(app).post("/api/auth/demo");
+    expect(again.status).toBe(200);
+    expect(again.body.data.user.workspaceName).toBe("Acme Support (demo)");
   });
 });

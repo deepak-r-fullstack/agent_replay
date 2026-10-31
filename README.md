@@ -13,6 +13,12 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 | 5 | Tests and suites | |
 | 6 | Demo data, docs, deploy | |
 
+## Milestone 6 checklist (demo, docs, deploy)
+
+- Seed data that tells the refund story (wrong amount, fork at step 3, fixed, save as test).
+- README screenshots and the 3-minute demo script, `render.yaml`, SDK ready to publish.
+- **Protect the shared demo workspace.** Every demo visitor shares one workspace, so one visitor can change what the next one sees. Plan a regular demo reset, or protect the seeded items: seeded apps cannot be revoked or rotated, and some app slots stay free so visitors can always add one.
+
 ## What is in the repo
 
 ```

@@ -12,9 +12,10 @@ import {
   DEMO_USER_NAME,
   DEMO_WORKSPACE_NAME,
   DEMO_WORKSPACE_SLUG,
+  RESERVED_EMAIL_SUFFIX,
   UserRole,
 } from "../../constants";
-import { ConflictError, UnauthorizedError } from "../../helpers/errors";
+import { BadRequestError, ConflictError, ServiceUnavailableError, UnauthorizedError } from "../../helpers/errors";
 
 export interface AuthTokenPayload {
   sub: string; // user id
@@ -67,10 +68,15 @@ function buildSession(user: Pick<UserDoc, "_id" | "workspaceId" | "role" | "name
   };
 }
 
+// A real bcrypt hash of a throwaway text. Checked when no user matches, so "no such email" takes as long as "wrong password".
+const DUMMY_PASSWORD_HASH = "$2b$10$b1dJ4LSjVuR6BS42HFkTaeyQTvE8XwkU5.paMwKNvf6BFIJ/J99Cu";
+
 export async function login(email: string, password: string) {
   const user = await User.findOne({ email: email.toLowerCase().trim() }).select("+passwordHash");
   // Same message for "no such user" and "wrong password", so emails cannot be guessed.
-  const passwordOk = user ? await bcrypt.compare(password, user.passwordHash) : false;
+  // The timing matches too: bcrypt always runs, against a dummy hash when there is no user.
+  const hashMatches = await bcrypt.compare(password, user ? user.passwordHash : DUMMY_PASSWORD_HASH);
+  const passwordOk = Boolean(user) && hashMatches;
   if (!user || !passwordOk) throw new UnauthorizedError("Email or password is not correct.");
   // Only said after the password is right, so this message cannot be used to find out who has an account.
   if (!isUserActive(user)) throw new UnauthorizedError("This account has been turned off. Please ask the owner of your workspace.");
@@ -93,6 +99,8 @@ function makeWorkspaceSlug(name: string) {
 // Self-serve sign-up: a new person gets a brand-new workspace and owns it.
 export async function signup(input: { name: string; email: string; password: string; workspaceName: string }) {
   const email = input.email.toLowerCase().trim();
+  // Demo addresses are reserved, so nobody can sign up as (or squat on) the shared demo person.
+  if (email.endsWith(RESERVED_EMAIL_SUFFIX)) throw new BadRequestError("This email address can't be used. Please use your own email.");
   if (await User.exists({ email })) throw new ConflictError("There is already an account with this email. Try signing in instead.");
 
   const workspace = await Workspace.create({ name: input.workspaceName, slug: makeWorkspaceSlug(input.workspaceName) });
@@ -125,7 +133,9 @@ export async function demoLogin() {
     { upsert: true, new: true }
   ).lean();
 
-  let user = await User.findOne({ email: DEMO_USER_EMAIL });
+  // Always look in the demo workspace too: a person with the same email anywhere else is never the demo visitor.
+  const demoUserFilter = { email: DEMO_USER_EMAIL, workspaceId: workspace!._id };
+  let user = await User.findOne(demoUserFilter);
   if (!user) {
     try {
       user = await User.create({
@@ -139,10 +149,12 @@ export async function demoLogin() {
     } catch (err) {
       // Two visitors pressed the button at once; the other one created the user first.
       if ((err as { code?: number }).code !== 11000) throw err;
-      user = await User.findOne({ email: DEMO_USER_EMAIL });
+      user = await User.findOne(demoUserFilter);
     }
   }
-  return buildSession(user!, workspace!.name);
+  // The email is taken by someone outside the demo workspace. Refuse rather than sign anyone in as them.
+  if (!user) throw new ServiceUnavailableError("The demo is not available right now. Please try again later.");
+  return buildSession(user, workspace!.name);
 }
 
 // ---------- SDK keys ----------
