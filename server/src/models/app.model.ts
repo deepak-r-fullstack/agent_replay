@@ -10,6 +10,8 @@ const appSchema = new Schema(
     apiKeyPreview: { type: String, required: true }, // e.g. "ar_3f9c…" so people can tell keys apart
     // Revoked = the key stops working at once. The app and its old runs stay visible.
     active: { type: Boolean, default: true },
+    // Made by the demo seed. Its key cannot be revoked or rotated, and it does not use up a visitor's app slots.
+    seeded: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

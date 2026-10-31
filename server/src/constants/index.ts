@@ -20,6 +20,13 @@ export const DEMO_WORKSPACE_NAME = "Acme Support (demo)";
 export const DEMO_USER_EMAIL = "demo@agentreplay.test";
 // Nobody may sign up with an address on this domain, so no real account can ever look like the demo's.
 export const RESERVED_EMAIL_SUFFIX = "@agentreplay.test";
+// The shared demo starts again from the same story this often, so visitors always find it tidy.
+export const DEMO_RESET_EVERY_MS = 60 * 60 * 1000;
+export const DEMO_APP_NAME = "Acme Support bot";
+// The AgentGuard action the wrong refund points to. AgentGuard's demo has to hold an action with exactly this id
+// (see docs/agentguard-demo-link.md), so the link in the demo opens the matching action there.
+// It must not be a long run of digits: those look like a card number, and the secret-hiding would blank them.
+export const AGENTGUARD_DEMO_ACTION_ID = "65a1c2e4f0b8d7a9136e1041";
 export const DEMO_USER_NAME = "Demo Visitor";
 
 // ---------- recording runs ----------
@@ -45,6 +52,13 @@ export const UNTITLED_RUN_NAME = "Untitled run";
 export const MAX_BYTES_PER_WORKSPACE_PER_DAY = 20 * 1024 * 1024;
 export const MAX_BYTES_PER_DEMO_WORKSPACE_PER_DAY = 5 * 1024 * 1024; // the demo is open to anyone, so it gets less
 export const MAX_BYTES_PER_WORKSPACE_TOTAL = 100 * 1024 * 1024;
+// Every new run (recorded or forked) counts this much too, so runs with no steps cannot get around the limits.
+export const RUN_STORAGE_BYTES = 1024;
+// One limit across ALL workspaces together. New workspaces are free to create and the Atlas cluster (512 MB) is shared with AgentGuard.
+export const MAX_BYTES_GLOBAL = 250 * 1024 * 1024;
+// The counter key for that limit. It lives under a fixed "no workspace" id (all zeros), so it never mixes with a real workspace.
+export const STORAGE_GLOBAL_KEY = "global";
+export const STORAGE_GLOBAL_WORKSPACE_ID = "000000000000000000000000";
 // The counter key that holds a workspace's all-time total (the daily counters use the date, for example "2026-10-31").
 export const STORAGE_TOTAL_KEY = "total";
 // Daily counters tidy themselves away after this long.
@@ -118,3 +132,9 @@ export const MAX_TEST_AI_CALLS_PER_DAY_DEMO_PROVIDER = 500;
 export const MAX_TEST_OUTPUT_BYTES = 4 * 1024; // the answer kept with a result (checks look at the whole answer)
 export const TEST_RESULT_KEEP_DAYS = 30; // old results delete themselves
 export const MAX_TEST_NAME_LENGTH = 120;
+
+// ---------- keeping the counters honest ----------
+// How often the server looks at its housekeeping jobs. Each job has its own interval, and only one server wins each run.
+export const MAINTENANCE_CHECK_EVERY_MS = 60 * 60 * 1000;
+// The daily clean-up works out each workspace's real storage total again, because deletes (old test results, demo reset) lower it.
+export const STORAGE_CLEANUP_EVERY_MS = 24 * 60 * 60 * 1000;

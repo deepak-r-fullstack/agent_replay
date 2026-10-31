@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { z } from "zod";
 import { successResponseWithData } from "../helpers/response";
 import { demoLogin, login, signup } from "../services/auth/auth.service";
+import { resetDemoIfDue } from "../services/demo/demoSeed.service";
 import { getRequestUser } from "../middlewares/auth.middleware";
 import { Workspace } from "../models/workspace.model";
 
@@ -30,6 +31,8 @@ export async function signupUser(_req: Request, res: Response) {
 }
 
 export async function loginDemo(_req: Request, res: Response) {
+  // The shared demo starts again from its story when it is due (once an hour), before the visitor arrives.
+  await resetDemoIfDue();
   const session = await demoLogin();
   return successResponseWithData(res, "Signed in to the demo.", session);
 }
@@ -44,5 +47,6 @@ export async function getCurrentUser(_req: Request, res: Response) {
     role: user.role,
     workspaceId: String(user.workspaceId),
     workspaceName: workspace?.name || "",
+    isDemo: Boolean(workspace?.isDemo),
   });
 }

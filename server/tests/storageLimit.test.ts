@@ -4,6 +4,7 @@ import {
   MAX_BYTES_PER_DEMO_WORKSPACE_PER_DAY,
   MAX_BYTES_PER_WORKSPACE_PER_DAY,
   MAX_BYTES_PER_WORKSPACE_TOTAL,
+  RUN_STORAGE_BYTES,
   STORAGE_TOTAL_KEY,
 } from "../src/constants";
 import { Run } from "../src/models/run.model";
@@ -22,6 +23,7 @@ const PASSWORD = "a-good-password";
 const DAY = MAX_BYTES_PER_WORKSPACE_PER_DAY;
 const DEMO_DAY = MAX_BYTES_PER_DEMO_WORKSPACE_PER_DAY;
 const TOTAL = MAX_BYTES_PER_WORKSPACE_TOTAL;
+const RUN = RUN_STORAGE_BYTES; // every new run counts this much on top of its steps
 const TODAY = dayKey(new Date());
 
 interface Team {
@@ -83,53 +85,79 @@ describe("what counts", () => {
       steps: [{ runId: "r", index: 0, type: "tool", name: "abc", input: "x".repeat(1000), output: "y".repeat(500), error: "e".repeat(10) }],
     });
     expect(res.status).toBe(200);
-    expect(await usage(team)).toBe(1513);
-    expect(await usage(team, STORAGE_TOTAL_KEY)).toBe(1513);
+    expect(await usage(team)).toBe(1513 + RUN);
+    expect(await usage(team, STORAGE_TOTAL_KEY)).toBe(1513 + RUN);
     await send(team, { steps: [stepOf("r", 1, 100)] });
-    expect(await usage(team)).toBe(1613);
-    expect(await usage(team, STORAGE_TOTAL_KEY)).toBe(1613);
+    expect(await usage(team)).toBe(1613 + RUN);
+    expect(await usage(team, STORAGE_TOTAL_KEY)).toBe(1613 + RUN);
   });
 
   it("counts letters with accents by their real size, and text as it is stored (after secrets are hidden)", async () => {
     const team = await makeTeam("bytes");
     await send(team, { steps: [{ runId: "r", index: 0, type: "tool", name: "a", input: "é".repeat(100), output: "" }] });
-    expect(await usage(team)).toBe(201);
+    expect(await usage(team)).toBe(201 + RUN);
     await send(team, { steps: [{ runId: "r", index: 1, type: "tool", name: "a", input: "mail a@b.com", output: "" }] });
-    expect(await usage(team)).toBe(201 + 1 + "mail [email hidden]".length);
+    expect(await usage(team)).toBe(201 + RUN + 1 + "mail [email hidden]".length);
   });
 
   it("does not count steps that are already saved, whether sent again alone or together with new ones", async () => {
     const team = await makeTeam("repeat-count");
     const first = { steps: [stepOf("r", 0, 300), stepOf("r", 1, 300)] };
     await send(team, first);
-    expect(await usage(team)).toBe(600);
+    expect(await usage(team)).toBe(600 + RUN);
     await send(team, first);
-    expect(await usage(team)).toBe(600);
+    expect(await usage(team)).toBe(600 + RUN);
     await send(team, { steps: [stepOf("r", 0, 300), stepOf("r", 2, 200)] });
-    expect(await usage(team)).toBe(800);
+    expect(await usage(team)).toBe(800 + RUN);
     expect(await stepCount(team)).toBe(3);
   });
 
   it("counts a step once when it appears twice in the same batch", async () => {
     const team = await makeTeam("twice-in-batch");
     await send(team, { steps: [stepOf("r", 0, 400), stepOf("r", 0, 400)] });
-    expect(await usage(team)).toBe(400);
+    expect(await usage(team)).toBe(400 + RUN);
+  });
+
+  it("counts a run with no steps, so empty runs cannot get around the limits", async () => {
+    const team = await makeTeam("empty-run");
+    await send(team, { runs: [{ id: "empty", name: "Nothing yet" }] });
+    expect(await usage(team)).toBe(RUN);
+    expect(await usage(team, STORAGE_TOTAL_KEY)).toBe(RUN);
+  });
+
+  it("counts every new run in a batch, but not a run that is already saved", async () => {
+    const team = await makeTeam("many-runs");
+    await send(team, { runs: [{ id: "a" }, { id: "b" }, { id: "c" }] });
+    expect(await usage(team)).toBe(3 * RUN);
+    await send(team, { runs: [{ id: "a", status: "ok" }, { id: "d" }], steps: [stepOf("b", 0, 100)] });
+    expect(await usage(team)).toBe(4 * RUN + 100);
+    expect(await runCount(team)).toBe(4);
+  });
+
+  it("refuses empty runs once the day is full, and saves none of them", async () => {
+    const team = await makeTeam("empty-full");
+    await setUsage(team, TODAY, DAY - RUN);
+    const res = await send(team, { runs: [{ id: "a" }, { id: "b" }] });
+    expect(res.status).toBe(429);
+    expect(await runCount(team)).toBe(0);
+    expect(await usage(team)).toBe(DAY - RUN);
+    expect((await send(team, { runs: [{ id: "a" }] })).status).toBe(200);
   });
 });
 
 describe("the daily limit", () => {
   it("saves a batch that fits", async () => {
     const team = await makeTeam("fits");
-    await setUsage(team, TODAY, DAY - 2000);
+    await setUsage(team, TODAY, DAY - 4000);
     const res = await send(team, { runs: [{ id: "r", name: "Fits" }], steps: [stepOf("r", 0, 1500)] });
     expect(res.status).toBe(200);
-    expect(await usage(team)).toBe(DAY - 500);
+    expect(await usage(team)).toBe(DAY - 1476);
     expect(await stepCount(team)).toBe(1);
   });
 
   it("accepts a batch that lands exactly on the limit, and refuses the next byte", async () => {
     const team = await makeTeam("exact");
-    await setUsage(team, TODAY, DAY - 1000);
+    await setUsage(team, TODAY, DAY - 1000 - RUN);
     expect((await send(team, { steps: [stepOf("r", 0, 1000)] })).status).toBe(200);
     expect(await usage(team)).toBe(DAY);
     expect((await send(team, { steps: [stepOf("r", 1, 1)] })).status).toBe(429);
@@ -151,7 +179,7 @@ describe("the daily limit", () => {
 
   it("does not use up the limit when a batch is sent again", async () => {
     const team = await makeTeam("repeat-limit");
-    await setUsage(team, TODAY, DAY - 700);
+    await setUsage(team, TODAY, DAY - 700 - RUN);
     const batch = { runs: [{ id: "r", name: "Repeat" }], steps: [stepOf("r", 0, 700)] };
     expect((await send(team, batch)).status).toBe(200);
     expect(await usage(team)).toBe(DAY); // the workspace is now exactly full
@@ -165,7 +193,7 @@ describe("the daily limit", () => {
 
   it("still accepts run updates that carry no new steps when the workspace is full", async () => {
     const team = await makeTeam("full-but-end");
-    await setUsage(team, TODAY, DAY - 50);
+    await setUsage(team, TODAY, DAY - 50 - RUN);
     await send(team, { runs: [{ id: "r", name: "Almost done" }], steps: [stepOf("r", 0, 50)] });
     const end = await send(team, { runs: [{ id: "r", status: "ok", durationMs: 100 }] });
     expect(end.status).toBe(200);
@@ -177,19 +205,20 @@ describe("the daily limit", () => {
     const yesterday = dayKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
     await setUsage(team, yesterday, DAY);
     expect((await send(team, { steps: [stepOf("r", 0, 1000)] })).status).toBe(200);
-    expect(await usage(team)).toBe(1000);
+    expect(await usage(team)).toBe(1000 + RUN);
     expect(await usage(team, yesterday)).toBe(DAY);
   });
 
   it("holds the limit when many batches arrive at the same moment", async () => {
     const team = await makeTeam("race");
-    await setUsage(team, TODAY, DAY - 5000);
+    const PER = 1000 + RUN; // each batch is one new run with 1000 bytes of steps
+    await setUsage(team, TODAY, DAY - 3 * PER);
     const results = await Promise.all(Array.from({ length: 10 }, (_, index) => send(team, { steps: [stepOf(`run-${index}`, 0, 1000)] })));
     const accepted = results.filter((res) => res.status === 200).length;
-    expect(accepted).toBe(5);
-    expect(results.filter((res) => res.status === 429)).toHaveLength(5);
+    expect(accepted).toBe(3);
+    expect(results.filter((res) => res.status === 429)).toHaveLength(7);
     expect(await usage(team)).toBe(DAY);
-    expect(await stepCount(team)).toBe(5);
+    expect(await stepCount(team)).toBe(3);
   });
 
   it("gives every day counter an expiry so old ones tidy themselves away, but not the all-time one", async () => {
@@ -205,8 +234,8 @@ describe("the demo workspace", () => {
     const demo = await makeDemoTeam();
     const normal = await makeTeam("normal-vs-demo");
     // Both are 100 bytes short of the demo's limit. That is full for the demo, and plenty of room for anyone else.
-    await setUsage(demo, TODAY, DEMO_DAY - 100);
-    await setUsage(normal, TODAY, DEMO_DAY - 100);
+    await setUsage(demo, TODAY, DEMO_DAY - 100 - RUN);
+    await setUsage(normal, TODAY, DEMO_DAY - 100 - RUN);
 
     const refused = await send(demo, { steps: [stepOf("r", 0, 101)] });
     expect(refused.status).toBe(429);
@@ -227,12 +256,12 @@ describe("the demo workspace", () => {
 describe("the all-time limit", () => {
   it("refuses once the workspace holds 100 MB in total, and gives the day's share back", async () => {
     const team = await makeTeam("total");
-    await setUsage(team, STORAGE_TOTAL_KEY, TOTAL - 100);
+    await setUsage(team, STORAGE_TOTAL_KEY, TOTAL - 100 - RUN);
     await setUsage(team, TODAY, 1000);
     const res = await send(team, { steps: [stepOf("r", 0, 101)] });
     expect(res.status).toBe(429);
     expect(res.body.message).toBe("This workspace has reached its storage limit.");
-    expect(await usage(team, STORAGE_TOTAL_KEY)).toBe(TOTAL - 100);
+    expect(await usage(team, STORAGE_TOTAL_KEY)).toBe(TOTAL - 100 - RUN);
     expect(await usage(team)).toBe(1000); // not left raised by the refused batch
     expect(await stepCount(team)).toBe(0);
     // Something that still fits is fine.
@@ -250,7 +279,7 @@ describe("workspaces stay separate", () => {
 
     expect((await send(full, { steps: [stepOf("r", 0, 10)] })).status).toBe(429);
     expect((await send(free, { steps: [stepOf("r", 0, 10)] })).status).toBe(200);
-    expect(await usage(free)).toBe(10);
+    expect(await usage(free)).toBe(10 + RUN);
     expect(await usage(full)).toBe(DAY);
     expect(await usage(full, STORAGE_TOTAL_KEY)).toBe(TOTAL);
   });
@@ -262,7 +291,7 @@ describe("workspaces stay separate", () => {
       .send({ email: "two-apps@storage.test.example", password: PASSWORD })
       .then((login) => request(app).post("/api/apps").set(authed(login.body.data.token)).send({ name: "Second app" }));
     const second: Team = { ...first, appId: secondApp.body.data.id, apiKey: secondApp.body.data.apiKey };
-    await setUsage(first, TODAY, DAY - 100);
+    await setUsage(first, TODAY, DAY - 100 - RUN);
     expect((await send(first, { steps: [stepOf("r", 0, 100)] })).status).toBe(200);
     expect((await send(second, { steps: [stepOf("r", 0, 1)] })).status).toBe(429);
   });

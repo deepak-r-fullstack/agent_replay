@@ -38,8 +38,16 @@ const envSchema = z.object({
   LLM_API_KEY: z.string().optional().default(""),
   // Only for ollama (local: http://127.0.0.1:11434) or an OpenAI-compatible gateway.
   LLM_BASE_URL: z.string().optional().default(""),
+  // Where AgentGuard's public demo lives. The wrong refund in AgentReplay's demo links to the matching action there.
+  AGENTGUARD_DEMO_URL: z.string().default("https://agentguard.sritaraksolutions.in"),
   // Demo mode turns on the "Try the demo" sign-in.
   DEMO_MODE: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  // While demo mode is on, the shared demo starts again from its story once an hour (and when the first visitor
+  // arrives after that). "false" leaves the demo workspace alone, which is only useful in tests.
+  DEMO_AUTO_RESET: z
     .enum(["true", "false"])
     .default("true")
     .transform((value) => value === "true"),
