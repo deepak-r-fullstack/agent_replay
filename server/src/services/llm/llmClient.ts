@@ -41,6 +41,9 @@ export interface ChatOptions {
   forceDemo?: boolean;
   // How long this one call may take before it is given up. Defaults to the limit for a single AI call.
   timeoutMs?: number;
+  // Called at the moment a request is about to be sent to a real (paid) provider, and never for the free demo model or
+  // for a call that fails before it is sent. Forks use it to know whether money may have been spent.
+  onProviderCall?: () => void;
 }
 
 /** True when answers come from the free scripted demo model, so nothing is spent. */
@@ -95,10 +98,11 @@ export function llmDescription() {
   };
 }
 
-async function postJson(url: string, headers: Record<string, string>, body: unknown, timeoutMs: number): Promise<any> {
+async function postJson(url: string, headers: Record<string, string>, body: unknown, timeoutMs: number, onProviderCall?: () => void): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    onProviderCall?.();
     const response = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
@@ -167,7 +171,8 @@ export async function completeChat(request: ChatRequest, options: ChatOptions = 
         ...(env.LLM_BASE_URL ? { max_tokens: MAX_ANSWER_TOKENS } : { max_completion_tokens: MAX_ANSWER_TOKENS }),
         messages: [...(request.system ? [{ role: "system", content: request.system }] : []), ...request.messages],
       },
-      timeoutMs
+      timeoutMs,
+      options.onProviderCall
     );
     const inputTokens = count(data?.usage?.prompt_tokens);
     const outputTokens = count(data?.usage?.completion_tokens);
@@ -179,7 +184,8 @@ export async function completeChat(request: ChatRequest, options: ChatOptions = 
       "https://api.anthropic.com/v1/messages",
       { "x-api-key": env.LLM_API_KEY, "anthropic-version": "2023-06-01" },
       { model, max_tokens: MAX_ANSWER_TOKENS, temperature: 0, ...(request.system ? { system: request.system } : {}), messages: request.messages },
-      timeoutMs
+      timeoutMs,
+      options.onProviderCall
     );
     const inputTokens = count(data?.usage?.input_tokens);
     const outputTokens = count(data?.usage?.output_tokens);
@@ -203,7 +209,8 @@ export async function completeChat(request: ChatRequest, options: ChatOptions = 
       options: { temperature: 0, num_predict: MAX_ANSWER_TOKENS },
       messages: [...(request.system ? [{ role: "system", content: request.system }] : []), ...request.messages],
     },
-    timeoutMs
+    timeoutMs,
+    options.onProviderCall
   );
   const inputTokens = count(data?.prompt_eval_count);
   const outputTokens = count(data?.eval_count);

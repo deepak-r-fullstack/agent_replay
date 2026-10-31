@@ -18,7 +18,7 @@ import { applyPromptEdit, applyReplacements, chatRequestFrom, Replacement } from
 // Every fork is also held to cost limits, because anyone can start one (including demo visitors):
 //   - the demo workspace always uses the free scripted model, whatever LLM_PROVIDER says
 //   - with a paid provider only allowed models are used (see resolveModel)
-//   - a daily limit of forks per workspace, taken before any AI call and given back if the fork does not finish
+//   - a daily limit of forks per workspace, taken before any AI call and given back only if no paid call was made
 //   - each AI call may take 30 seconds and the whole fork 90; past that nothing is saved and nothing is counted
 // There is no code in this file that runs a tool: only AI steps reach the AI model, and everything else is copied.
 // The original run and its steps are only ever read.
@@ -172,7 +172,18 @@ export async function forkRun(workspaceId: Types.ObjectId, runId: string, input:
   const forceDemo = Boolean(workspace?.isDemo);
 
   // One of today's forks is taken BEFORE any AI call, so a burst of requests cannot run up the bill.
-  // Everything below that fails gives it back, so a fork that was not made is not counted.
+  // If the fork then fails, the slot is given back ONLY when no call reached a paid provider. A call that was sent may
+  // already have cost money, even if it then timed out, so repeated failures can never get around the daily limit.
+  // Calls to the free demo model cost nothing and do not count.
+  let paidCallMade = false;
+  const askAndNotice: Ask = (request, options) =>
+    ask(request, {
+      ...options,
+      onProviderCall: () => {
+        paidCallMade = true;
+        options?.onProviderCall?.();
+      },
+    });
   const now = new Date();
   if (!(await reserveForkSlot(workspaceId, usesDemoProvider(forceDemo), now))) {
     throw new TooManyRequestsError("This workspace has used today's forks. Try again tomorrow.");
@@ -180,7 +191,7 @@ export async function forkRun(workspaceId: Types.ObjectId, runId: string, input:
 
   try {
     // May throw 503 when the AI model cannot be reached or takes too long: then nothing has been saved or counted.
-    const planned = await withTimeout(planSteps(steps, input, ask, forceDemo, limits, startedAt + limits.forkMs), Math.max(1, startedAt + limits.forkMs - Date.now()), FORK_TOO_LONG);
+    const planned = await withTimeout(planSteps(steps, input, askAndNotice, forceDemo, limits, startedAt + limits.forkMs), Math.max(1, startedAt + limits.forkMs - Date.now()), FORK_TOO_LONG);
 
     // Forks use the same storage room as recorded runs.
     const bytes = planned.reduce((total, step) => total + textBytes(step), 0);
@@ -221,7 +232,7 @@ export async function forkRun(workspaceId: Types.ObjectId, runId: string, input:
       throw err;
     }
   } catch (err) {
-    await releaseForkSlot(workspaceId, now).catch(() => undefined);
+    if (!paidCallMade) await releaseForkSlot(workspaceId, now).catch(() => undefined);
     throw err;
   }
 }

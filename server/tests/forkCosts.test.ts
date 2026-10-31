@@ -300,6 +300,125 @@ describe("the daily limit on forks", () => {
   });
 });
 
+describe("a fork slot is only given back when no paid call was made", () => {
+  // A paid provider that accepts the request and then never answers, until the call is stopped.
+  function hangingProvider(answerFirst = 0) {
+    let calls = 0;
+    const spy = jest.spyOn(globalThis, "fetch").mockImplementation(((_url: string, init: { signal: AbortSignal }) => {
+      calls += 1;
+      if (calls <= answerFirst) return Promise.resolve({ ok: true, status: 200, json: async () => OPENAI_REPLY });
+      return new Promise((_resolve, reject) => init.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
+    }) as never);
+    return { spy, calls: () => calls };
+  }
+  const paid = () => Object.assign(env, { LLM_PROVIDER: "openai", LLM_API_KEY: "sk-test-not-a-real-key-1234567890", LLM_MODEL: "gpt-4.1-mini", LLM_ALLOWED_MODELS: ["gpt-4o-mini"], LLM_BASE_URL: "" });
+  const tooSlow = { callMs: 80, forkMs: 10_000 };
+  const input = { fromStepIndex: 0, edits: {} };
+
+  async function aiSteps(team: Team, count: number) {
+    const run = await Run.create({ workspaceId: team.workspaceId, appId: team.appId, name: "AI steps", stepCount: count });
+    await Step.insertMany(Array.from({ length: count }, (_, index) => ({ runId: run._id, index, type: "llm", name: `ask ${index}`, model: "gpt-4o-mini", input: "question", output: "answer" })));
+    return run;
+  }
+
+  it("keeps the slot when one paid call was made and then the fork timed out", async () => {
+    const team = await makeTeam("paid-timeout");
+    const run = await aiSteps(team, 1);
+    paid();
+    const provider = hangingProvider();
+    const before = await everythingSaved(team);
+    const failure = await forkRun(new Types.ObjectId(team.workspaceId), String(run._id), input, undefined, tooSlow).catch((error) => error);
+    expect(failure).toBeInstanceOf(ServiceUnavailableError);
+    expect(failure.message).toMatch(/took too long to answer/);
+    expect(provider.calls()).toBe(1); // the request really was sent
+    expect(await forkCount(team)).toBe(1); // so the slot stays used
+    expect(await everythingSaved(team)).toEqual(before); // and still nothing is saved
+  });
+
+  it("keeps the slot when a paid call worked and a later one timed out", async () => {
+    const team = await makeTeam("paid-then-timeout");
+    const run = await aiSteps(team, 2);
+    paid();
+    const provider = hangingProvider(1); // the first call is answered, the second never is
+    const failure = await forkRun(new Types.ObjectId(team.workspaceId), String(run._id), input, undefined, tooSlow).catch((error) => error);
+    expect(failure).toBeInstanceOf(ServiceUnavailableError);
+    expect(provider.calls()).toBe(2);
+    expect(await forkCount(team)).toBe(1);
+  });
+
+  it("keeps the slot when a paid call worked and the fork then failed for another reason", async () => {
+    const team = await makeTeam("paid-then-storage");
+    const run = await aiSteps(team, 1);
+    paid();
+    hangingProvider(1);
+    await StorageUsage.updateOne({ workspaceId: team.workspaceId, day: TODAY }, { $set: { bytes: MAX_BYTES_PER_WORKSPACE_PER_DAY - 5 } }, { upsert: true });
+    const failure = await forkRun(new Types.ObjectId(team.workspaceId), String(run._id), input).catch((error) => error);
+    expect(failure.statusCode).toBe(429); // no storage room, after the paid call was already made
+    expect(await forkCount(team)).toBe(1);
+  });
+
+  it("means repeated timeouts cannot get around the daily limit", async () => {
+    const team = await makeTeam("paid-repeat");
+    const run = await aiSteps(team, 1);
+    paid();
+    const provider = hangingProvider();
+    await setForkCount(team, MAX_FORKS_PER_DAY_REAL_PROVIDER - 2);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await forkRun(new Types.ObjectId(team.workspaceId), String(run._id), input, undefined, tooSlow).catch(() => undefined);
+    }
+    expect(provider.calls()).toBe(2); // two paid calls were made...
+    expect(await forkCount(team)).toBe(MAX_FORKS_PER_DAY_REAL_PROVIDER); // ...and both used up a slot
+    const refused = await fork(team, run._id, input);
+    expect(refused.status).toBe(429);
+    expect(refused.body.message).toBe("This workspace has used today's forks. Try again tomorrow.");
+    expect(provider.calls()).toBe(2); // the refused fork made no call
+  });
+
+  it("gives the slot back when the failure happened before anything reached the provider", async () => {
+    const team = await makeTeam("paid-not-sent");
+    const run = await aiSteps(team, 1);
+    Object.assign(env, { LLM_PROVIDER: "openai", LLM_API_KEY: "" }); // not set up properly, so nothing can be sent
+    const { spy } = hangingProvider();
+    const failure = await forkRun(new Types.ObjectId(team.workspaceId), String(run._id), input).catch((error) => error);
+    expect(failure.message).toMatch(/AI is not set up/);
+    expect(spy).not.toHaveBeenCalled();
+    expect(await forkCount(team)).toBe(0);
+  });
+
+  it("gives the slot back when the free demo model is the one that failed, because it cost nothing", async () => {
+    const team = await makeTeam("demo-model-timeout");
+    const run = await aiSteps(team, 1);
+    const never = () => new Promise<never>(() => undefined);
+    const failure = await forkRun(new Types.ObjectId(team.workspaceId), String(run._id), input, never, tooSlow).catch((error) => error);
+    expect(failure).toBeInstanceOf(ServiceUnavailableError);
+    expect(await forkCount(team)).toBe(0);
+  });
+
+  it("gives the slot back for the demo workspace even when a paid provider is set up, because it never reaches it", async () => {
+    const demo = await makeDemoTeam();
+    const run = await aiSteps(demo, 1);
+    paid();
+    const { spy } = hangingProvider();
+    await setForkCount(demo, 0); // earlier tests may have used the demo workspace's slots; start clean so the fork is really tried
+    const before = await forkCount(demo);
+    // Something goes wrong after the slot is taken (the AI stand-in never answers).
+    const never = () => new Promise<never>(() => undefined);
+    await forkRun(new Types.ObjectId(demo.workspaceId), String(run._id), input, never, tooSlow).catch(() => undefined);
+    expect(spy).not.toHaveBeenCalled();
+    expect(await forkCount(demo)).toBe(before);
+  });
+
+  it("is also true for a fork that fails because the paid provider refuses the request", async () => {
+    const team = await makeTeam("paid-refused");
+    const run = await aiSteps(team, 1);
+    paid();
+    jest.spyOn(globalThis, "fetch").mockImplementation((async () => ({ ok: false, status: 401, json: async () => ({}) })) as never);
+    const failure = await forkRun(new Types.ObjectId(team.workspaceId), String(run._id), input).catch((error) => error);
+    expect(failure.message).toMatch(/answered with status 401/);
+    expect(await forkCount(team)).toBe(1); // the request reached the provider
+  });
+});
+
 describe("the time limits", () => {
   const input = fixPrompt();
   const slow = (ms: number) => async (request: llmClient.ChatRequest) => {

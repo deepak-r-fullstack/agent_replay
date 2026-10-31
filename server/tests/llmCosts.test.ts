@@ -143,6 +143,53 @@ describe("what is sent to a paid provider", () => {
   });
 });
 
+describe("knowing when money may have been spent", () => {
+  const signal = () => jest.fn();
+
+  it("says so just before a request is sent to a paid provider, even if the provider then fails", async () => {
+    paidOpenAi();
+    const onProviderCall = signal();
+    const spy = jest.spyOn(globalThis, "fetch").mockImplementation((async () => {
+      expect(onProviderCall).toHaveBeenCalledTimes(1); // already told, before the request went out
+      return { ok: false, status: 500, json: async () => ({}) };
+    }) as never);
+    await expect(completeChat(ask(), { onProviderCall })).rejects.toThrow(/answered with status 500/);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(onProviderCall).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so for every paid provider", async () => {
+    for (const provider of ["openai", "anthropic", "ollama"] as const) {
+      Object.assign(env, { LLM_PROVIDER: provider, LLM_API_KEY: "key-1234567890", LLM_MODEL: "the-model", LLM_ALLOWED_MODELS: [], LLM_BASE_URL: "" });
+      jest.spyOn(globalThis, "fetch").mockImplementation((async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Hi" } }], content: [{ text: "Hi" }], message: { content: "Hi" } }) })) as never);
+      const onProviderCall = signal();
+      await completeChat(ask("the-model"), { onProviderCall });
+      expect(onProviderCall).toHaveBeenCalledTimes(1);
+      jest.restoreAllMocks();
+    }
+  });
+
+  it("does not say so for the free demo model, whichever way it is chosen", async () => {
+    const onProviderCall = signal();
+    Object.assign(env, { LLM_PROVIDER: "demo" });
+    await completeChat(ask("demo-model"), { onProviderCall });
+    paidOpenAi();
+    const spy = jest.spyOn(globalThis, "fetch");
+    await completeChat(ask("demo-model"), { forceDemo: true, onProviderCall });
+    expect(onProviderCall).not.toHaveBeenCalled();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not say so when the call fails before anything is sent", async () => {
+    Object.assign(env, { LLM_PROVIDER: "openai", LLM_API_KEY: "" });
+    const onProviderCall = signal();
+    const spy = jest.spyOn(globalThis, "fetch");
+    await expect(completeChat(ask(), { onProviderCall })).rejects.toThrow(/AI is not set up/);
+    expect(onProviderCall).not.toHaveBeenCalled();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
 describe("the free demo model", () => {
   it("is used for the demo workspace even when a paid provider is set up, and never reaches that provider", async () => {
     paidOpenAi();
