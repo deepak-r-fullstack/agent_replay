@@ -25,7 +25,8 @@ export const DEMO_RESET_EVERY_MS = 60 * 60 * 1000;
 export const DEMO_APP_NAME = "Acme Support bot";
 // The AgentGuard action the wrong refund points to. AgentGuard's demo has to hold an action with exactly this id
 // (see docs/agentguard-demo-link.md), so the link in the demo opens the matching action there.
-export const AGENTGUARD_DEMO_ACTION_ID = "65a11e0000000000000b1041";
+// It must not be a long run of digits: those look like a card number, and the secret-hiding would blank them.
+export const AGENTGUARD_DEMO_ACTION_ID = "65a1c2e4f0b8d7a9136e1041";
 export const DEMO_USER_NAME = "Demo Visitor";
 
 // ---------- recording runs ----------

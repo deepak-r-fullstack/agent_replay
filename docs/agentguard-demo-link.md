@@ -3,7 +3,7 @@
 In AgentReplay's demo, the wrong refund step has a link: **Open in AgentGuard to undo**. It opens
 
 ```
-https://agentguard.sritaraksolutions.in/activity?action=65a11e0000000000000b1041
+https://agentguard.sritaraksolutions.in/activity?action=65a1c2e4f0b8d7a9136e1041
 ```
 
 AgentGuard already understands `/activity?action=<id>` (and sends people back to it after sign-in), but its demo
@@ -15,7 +15,7 @@ Every time AgentGuard seeds or resets its demo, it should create one action reco
 
 | Field | Value |
 | --- | --- |
-| `_id` | `65a11e0000000000000b1041` |
+| `_id` | `65a1c2e4f0b8d7a9136e1041` (a valid 24-letter ObjectId) |
 | workspace | the demo workspace ("Acme Travels") |
 | action | `booking.cancel` (any action that has Undo in the demo will do) |
 | status | `done` |
