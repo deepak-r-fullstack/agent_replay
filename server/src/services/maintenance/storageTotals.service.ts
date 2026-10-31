@@ -1,9 +1,10 @@
 import { Types } from "mongoose";
-import { MAX_TEST_OUTPUT_BYTES, RUN_STORAGE_BYTES, STORAGE_TOTAL_KEY } from "../../constants";
+import { MAX_TEST_OUTPUT_BYTES, RUN_STORAGE_BYTES, STORAGE_GLOBAL_KEY, STORAGE_GLOBAL_WORKSPACE_ID, STORAGE_TOTAL_KEY } from "../../constants";
 import { Run } from "../../models/run.model";
 import { Step } from "../../models/step.model";
 import { StorageUsage } from "../../models/storageUsage.model";
 import { TestResult } from "../../models/testResult.model";
+import { changeGlobalStorage } from "../ingest/storageQuota.service";
 
 // Works out how much a workspace really stores, from its data, the same way storage is counted when it is saved:
 // the text of every step, 1 KB for every run, and 4 KB for every test result that was asked (a skipped test gave its share back).
@@ -28,9 +29,16 @@ export async function measureWorkspaceStorage(workspaceId: Types.ObjectId | stri
   return (runs?.stepBytes ?? 0) + (runs?.runs ?? 0) * RUN_STORAGE_BYTES + results * MAX_TEST_OUTPUT_BYTES;
 }
 
-// Puts a workspace's all-time total right, whatever it said before. Returns the real number.
+// Puts a workspace's all-time total right, whatever it said before, and moves the global total by the same difference.
+// Returns the real number.
 export async function syncWorkspaceStorage(workspaceId: Types.ObjectId | string) {
   const bytes = await measureWorkspaceStorage(workspaceId);
-  await StorageUsage.updateOne({ workspaceId, day: STORAGE_TOTAL_KEY }, { $set: { bytes } }, { upsert: true });
+  const before = await StorageUsage.findOneAndUpdate({ workspaceId, day: STORAGE_TOTAL_KEY }, { $set: { bytes } }, { upsert: true, new: false }).lean();
+  await changeGlobalStorage(bytes - (before?.bytes ?? 0));
   return bytes;
+}
+
+// Sets the global total to an exact number (the sum of every workspace's real total).
+export async function setGlobalStorage(bytes: number) {
+  await StorageUsage.updateOne({ workspaceId: new Types.ObjectId(STORAGE_GLOBAL_WORKSPACE_ID), day: STORAGE_GLOBAL_KEY }, { $set: { bytes } }, { upsert: true });
 }

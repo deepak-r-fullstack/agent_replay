@@ -47,6 +47,11 @@ export const MAX_BYTES_PER_DEMO_WORKSPACE_PER_DAY = 5 * 1024 * 1024; // the demo
 export const MAX_BYTES_PER_WORKSPACE_TOTAL = 100 * 1024 * 1024;
 // Every new run (recorded or forked) counts this much too, so runs with no steps cannot get around the limits.
 export const RUN_STORAGE_BYTES = 1024;
+// One limit across ALL workspaces together. New workspaces are free to create and the Atlas cluster (512 MB) is shared with AgentGuard.
+export const MAX_BYTES_GLOBAL = 250 * 1024 * 1024;
+// The counter key for that limit. It lives under a fixed "no workspace" id (all zeros), so it never mixes with a real workspace.
+export const STORAGE_GLOBAL_KEY = "global";
+export const STORAGE_GLOBAL_WORKSPACE_ID = "000000000000000000000000";
 // The counter key that holds a workspace's all-time total (the daily counters use the date, for example "2026-10-31").
 export const STORAGE_TOTAL_KEY = "total";
 // Daily counters tidy themselves away after this long.
