@@ -81,7 +81,7 @@ describe("a run recorded with the SDK", () => {
         },
       },
     };
-    const ai = wrapOpenAI(fakeOpenAI, run, { price: { inputPerMillion: 150_000, outputPerMillion: 600_000 } });
+    const ai = wrapOpenAI(fakeOpenAI, run, { price: { inputPerMillion: 150, outputPerMillion: 600 } });
     const response = await ai.chat.completions.create({ model: "gpt-4o-mini", messages: [{ role: "user", content: "Say hi" }] });
     expect(response.choices[0].message.content).toBe("Hello!");
     run.end();
