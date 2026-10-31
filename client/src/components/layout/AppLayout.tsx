@@ -101,6 +101,11 @@ export const AppLayout = () => {
 
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 lg:py-10">
         <div className="mx-auto max-w-5xl">
+          {user?.isDemo && (
+            <p className="mb-6 rounded-lg border border-brand/20 bg-brand-tint px-4 py-3 text-sm text-ink" role="note">
+              You are in the demo. Try anything: it is shared with other visitors and starts again from the beginning every hour, so nothing you add is kept.
+            </p>
+          )}
           <Outlet />
         </div>
       </main>

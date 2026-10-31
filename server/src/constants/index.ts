@@ -20,6 +20,12 @@ export const DEMO_WORKSPACE_NAME = "Acme Support (demo)";
 export const DEMO_USER_EMAIL = "demo@agentreplay.test";
 // Nobody may sign up with an address on this domain, so no real account can ever look like the demo's.
 export const RESERVED_EMAIL_SUFFIX = "@agentreplay.test";
+// The shared demo starts again from the same story this often, so visitors always find it tidy.
+export const DEMO_RESET_EVERY_MS = 60 * 60 * 1000;
+export const DEMO_APP_NAME = "Acme Support bot";
+// The AgentGuard action the wrong refund points to. AgentGuard's demo has to hold an action with exactly this id
+// (see docs/agentguard-demo-link.md), so the link in the demo opens the matching action there.
+export const AGENTGUARD_DEMO_ACTION_ID = "65a11e0000000000000b1041";
 export const DEMO_USER_NAME = "Demo Visitor";
 
 // ---------- recording runs ----------

@@ -54,7 +54,7 @@ export function isUserActive(user: { active?: boolean | null }) {
 }
 
 // What the screens need to know about a signed-in person. Never includes the password hash.
-function buildSession(user: Pick<UserDoc, "_id" | "workspaceId" | "role" | "name" | "email">, workspaceName: string) {
+function buildSession(user: Pick<UserDoc, "_id" | "workspaceId" | "role" | "name" | "email">, workspaceName: string, isDemo = false) {
   return {
     token: signToken(user),
     user: {
@@ -64,6 +64,7 @@ function buildSession(user: Pick<UserDoc, "_id" | "workspaceId" | "role" | "name
       role: user.role,
       workspaceId: String(user.workspaceId),
       workspaceName,
+      isDemo, // the screens show a "this is a demo" note
     },
   };
 }
@@ -82,7 +83,7 @@ export async function login(email: string, password: string) {
   if (!isUserActive(user)) throw new UnauthorizedError("This account has been turned off. Please ask the owner of your workspace.");
 
   const workspace = await Workspace.findById(user.workspaceId).lean();
-  return buildSession(user, workspace?.name || "");
+  return buildSession(user, workspace?.name || "", Boolean(workspace?.isDemo));
 }
 
 // "My Team!" -> "my-team-3f9c1a". The random tail keeps two teams with the same name apart.
@@ -154,7 +155,7 @@ export async function demoLogin() {
   }
   // The email is taken by someone outside the demo workspace. Refuse rather than sign anyone in as them.
   if (!user) throw new ServiceUnavailableError("The demo is not available right now. Please try again later.");
-  return buildSession(user, workspace!.name);
+  return buildSession(user, workspace!.name, true);
 }
 
 // ---------- SDK keys ----------

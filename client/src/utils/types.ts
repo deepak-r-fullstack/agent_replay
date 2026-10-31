@@ -9,6 +9,7 @@ export interface SessionUser {
   role: UserRole;
   workspaceId: string;
   workspaceName: string;
+  isDemo?: boolean; // true in the shared demo workspace
 }
 
 export interface ApiEnvelope<T> {
@@ -22,6 +23,7 @@ export interface AppSummary {
   name: string;
   apiKeyPreview: string;
   active: boolean;
+  seeded?: boolean; // made by the demo seed: its key cannot be changed
   createdAt: string;
 }
 

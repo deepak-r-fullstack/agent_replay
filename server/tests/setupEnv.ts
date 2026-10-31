@@ -3,3 +3,5 @@ process.env.NODE_ENV = "test";
 process.env.JWT_SECRET = "test-secret-at-least-16-chars";
 process.env.DEMO_MODE = "true";
 process.env.LLM_PROVIDER = "demo";
+// The shared demo is not wiped and seeded when someone presses "Try the demo", so tests control what is in it.
+process.env.DEMO_AUTO_RESET = "false";

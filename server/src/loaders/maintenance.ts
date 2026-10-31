@@ -1,13 +1,15 @@
 import { MAINTENANCE_CHECK_EVERY_MS, STORAGE_CLEANUP_EVERY_MS } from "../constants";
 import { claimJob } from "../services/maintenance/claimJob";
+import { resetDemoIfDue } from "../services/demo/demoSeed.service";
 import { runStorageCleanup } from "../services/maintenance/storageCleanup.service";
 import { logger, serializeError } from "../utils/logger";
 
-// Starts the housekeeping timer. Every hour it looks at each job, and a job only runs when it is due and this server
+// Starts the housekeeping timer. Every hour it looks at each job (the demo reset and the storage clean-up), and a job only runs when it is due and this server
 // wins the claim. The timer never keeps the process alive and a failing job only logs.
 export function startMaintenance() {
   const tick = async () => {
     try {
+      await resetDemoIfDue(); // does nothing unless the demo is due
       if (await claimJob("storage-cleanup", STORAGE_CLEANUP_EVERY_MS)) await runStorageCleanup();
     } catch (err) {
       logger.error("maintenance failed", serializeError(err));

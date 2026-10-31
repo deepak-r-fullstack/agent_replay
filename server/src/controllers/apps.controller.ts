@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import { MAX_APPS_PER_WORKSPACE } from "../constants";
-import { BadRequestError, NotFoundError } from "../helpers/errors";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../helpers/errors";
 import { successResponseWithData } from "../helpers/response";
 import { getRequestUser } from "../middlewares/auth.middleware";
 import { App, AppDoc } from "../models/app.model";
@@ -20,6 +20,7 @@ function toAppSummary(app: AppDoc) {
     name: app.name,
     apiKeyPreview: app.apiKeyPreview,
     active: app.active,
+    seeded: Boolean(app.seeded),
     createdAt: app.createdAt,
   };
 }
@@ -35,7 +36,8 @@ export async function addApp(_req: Request, res: Response) {
   const user = getRequestUser(res);
   const { name } = res.locals.body as z.infer<typeof createAppSchema>;
 
-  if ((await App.countDocuments({ workspaceId: user.workspaceId })) >= MAX_APPS_PER_WORKSPACE) {
+  // Apps made by the demo seed are not counted, so they never take a visitor's slot.
+  if ((await App.countDocuments({ workspaceId: user.workspaceId, seeded: { $ne: true } })) >= MAX_APPS_PER_WORKSPACE) {
     throw new BadRequestError(`You can connect up to ${MAX_APPS_PER_WORKSPACE} apps. Remove one you no longer use first.`);
   }
 
@@ -49,8 +51,15 @@ export async function addApp(_req: Request, res: Response) {
   );
 }
 
+// The demo's own app must keep working for every visitor, so nobody can switch its key off or replace it.
+async function refuseIfSeeded(workspaceId: AppDoc["workspaceId"], appId: string) {
+  const app = await App.findOne({ _id: appId, workspaceId }).select("seeded").lean<Pick<AppDoc, "seeded">>().catch(() => null);
+  if (app?.seeded) throw new ForbiddenError("This app is part of the demo, so its key can't be changed.");
+}
+
 export async function rotateKey(req: Request, res: Response) {
   const user = getRequestUser(res);
+  await refuseIfSeeded(user.workspaceId, req.params.id);
   const rotated = await rotateAppKey(user.workspaceId, req.params.id);
   if (!rotated) throw new NotFoundError("That app was not found.");
   return successResponseWithData(res, "New key created. Copy it now — it will not be shown again.", {
@@ -62,6 +71,7 @@ export async function rotateKey(req: Request, res: Response) {
 // Revoking switches the key off at once. The app and its recorded runs stay.
 export async function revokeKey(req: Request, res: Response) {
   const user = getRequestUser(res);
+  await refuseIfSeeded(user.workspaceId, req.params.id);
   const app = await App.findOneAndUpdate({ _id: req.params.id, workspaceId: user.workspaceId }, { $set: { active: false } }, { new: true }).lean<AppDoc>();
   if (!app) throw new NotFoundError("That app was not found.");
   return successResponseWithData(res, "Key revoked. This app can no longer send runs.", toAppSummary(app));

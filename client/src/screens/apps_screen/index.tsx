@@ -70,12 +70,15 @@ const AppRow = ({ app, canEdit, onNewKey }: { app: AppSummary; canEdit: boolean;
         <p className="flex flex-wrap items-center gap-2 font-medium">
           {app.name}
           <DisplayBadge label={app.active ? "Key active" : "Key switched off"} tone={app.active ? "done" : "refused"} />
+          {app.seeded && <DisplayBadge label="Part of the demo" tone="neutral" />}
         </p>
         <p className="mt-0.5 text-sm text-ink-soft">
           Key starts with <code className="rounded bg-ink/5 px-1">{app.apiKeyPreview}</code> · added {formatDate(app.createdAt)}
         </p>
       </div>
+      {app.seeded && <p className="text-sm text-ink-soft sm:max-w-xs">This app is part of the demo, so its key can't be changed. Add your own app above.</p>}
       {canEdit &&
+        !app.seeded &&
         (confirming ? (
           <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`Confirm for ${app.name}`}>
             <span className="text-sm text-ink-soft">
