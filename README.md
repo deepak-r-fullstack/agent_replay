@@ -6,9 +6,9 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 
 | Milestone | What | Status |
 | --- | --- | --- |
-| 1 | Foundation: sign-up, sign-in, apps and SDK keys, CI | in review |
-| 2 | SDK and ingest | next |
-| 3 | Runs list and replay screens | |
+| 1 | Foundation: sign-up, sign-in, apps and SDK keys, CI | done |
+| 2 | SDK and ingest | in review |
+| 3 | Runs list and replay screens | next |
 | 4 | Fork and re-run | |
 | 5 | Tests and suites | |
 | 6 | Demo data, docs, deploy | |
@@ -23,6 +23,7 @@ Record every step of an AI run, replay it on a timeline, fork any step with a ch
 
 ```
 sdk/      the "agentreplay" npm package (no runtime dependencies)
+examples/ small scripts that use the SDK
 server/   Node 22 + Express + MongoDB API
 client/   React + Vite + Tailwind website
 ```
@@ -38,6 +39,18 @@ npm run dev
 ```
 
 Open http://localhost:5173. Click **Try the demo**, or **Create account**.
+
+## Record your first run
+
+1. In AgentReplay, open **Apps and keys**, add an app and copy its key (it is shown once).
+2. Build the SDK and run the example (it needs no AI key):
+
+```bash
+npm run build -w sdk
+AGENTREPLAY_API_KEY=ar_your_key AGENTREPLAY_URL=http://localhost:5050 node examples/record-a-run.js
+```
+
+The run is saved on the server now; the screens that show it arrive in milestone 3. See [`sdk/README.md`](sdk/README.md) for how to use the SDK in your own app.
 
 ## Checks
 

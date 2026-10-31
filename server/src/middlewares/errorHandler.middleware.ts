@@ -18,6 +18,9 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   if (err instanceof mongoose.Error.CastError) {
     return errorResponse(res, 404, "We could not find that item.");
   }
+  if ((err as { type?: string }).type === "entity.too.large") {
+    return errorResponse(res, 413, "That is too much data to send at once. Send fewer steps in each batch.");
+  }
   if (err instanceof SyntaxError && "body" in (err as object)) {
     return errorResponse(res, 400, "The request body is not valid JSON.");
   }
