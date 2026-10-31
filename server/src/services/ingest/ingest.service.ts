@@ -68,7 +68,8 @@ function buildRunUpsert(app: AppDoc, update: IngestRun, now: Date): AnyBulkWrite
     updateOne: {
       filter: { appId: app._id, externalId: update.id },
       // The earliest start time wins, so a placeholder made by an early step is corrected when the real start arrives.
-      update: { $set: set, $setOnInsert: setOnInsert, $min: { startedAt: update.startedAt ?? now } },
+      // Every batch that mentions the run counts as activity, including a batch sent a second time.
+      update: { $set: set, $setOnInsert: setOnInsert, $min: { startedAt: update.startedAt ?? now }, $max: { lastActivityAt: now } },
       upsert: true,
     },
   };

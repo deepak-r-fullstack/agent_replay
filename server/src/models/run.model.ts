@@ -23,6 +23,9 @@ const runSchema = new Schema(
     parentRunId: { type: Schema.Types.ObjectId, ref: "Run", default: null },
     forkedFromStepId: { type: Schema.Types.ObjectId, ref: "Step", default: null },
     startedAt: { type: Date, default: Date.now },
+    // The last time the SDK (or a fork) sent anything for this run. A run that is still "running" but quiet for
+    // an hour is shown as "unfinished".
+    lastActivityAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

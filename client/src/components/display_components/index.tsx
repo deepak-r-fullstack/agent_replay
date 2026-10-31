@@ -1,6 +1,8 @@
 import { ButtonHTMLAttributes, ReactNode } from "react";
 import { Loader2, X } from "lucide-react";
+import { STATUS_META } from "utils/helper_functions/format";
 import { useToastStore } from "utils/store/toastStore";
+import { DisplayStatus } from "utils/types";
 
 // Shared building blocks, like components/display_components in the NueAssist UI.
 
@@ -58,6 +60,16 @@ const TONE_STYLES = {
 export const DisplayBadge = ({ label, tone = "neutral" }: { label: string; tone?: keyof typeof TONE_STYLES }) => (
   <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONE_STYLES[tone]}`}>{label}</span>
 );
+
+// A run's status, in plain words. Hovering (or focusing) it explains what it means.
+export const DisplayStatusBadge = ({ status }: { status: DisplayStatus }) => {
+  const meta = STATUS_META[status];
+  return (
+    <span title={meta.hint} className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONE_STYLES[meta.tone]}`}>
+      {meta.label}
+    </span>
+  );
+};
 
 // ---------- Plain-words tooltip ----------
 

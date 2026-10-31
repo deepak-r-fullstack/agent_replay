@@ -1,5 +1,5 @@
 import { apiClient } from "./apiClient";
-import { ApiEnvelope, AppSummary, AppWithKey, SessionUser, SignupInput } from "utils/types";
+import { ApiEnvelope, AppSummary, AppWithKey, RunDetail, RunFilters, RunsPage, SessionUser, SignupInput, StepDetail } from "utils/types";
 
 // Thin wrappers around each endpoint. They return the full envelope; screens read `data` (and `message` when they want it).
 
@@ -21,4 +21,12 @@ export const appService = {
   create: (name: string) => unwrap<AppWithKey>(apiClient.post("/apps", { name })),
   rotateKey: (id: string) => unwrap<AppWithKey>(apiClient.post(`/apps/${id}/rotate-key`)),
   revokeKey: (id: string) => unwrap<AppSummary>(apiClient.post(`/apps/${id}/revoke-key`)),
+};
+
+export const runService = {
+  // Filters left empty are not sent at all.
+  list: (filters: RunFilters, page: number) =>
+    unwrap<RunsPage>(apiClient.get("/runs", { params: { ...filters, page } })),
+  get: (id: string) => unwrap<RunDetail>(apiClient.get(`/runs/${id}`)),
+  step: (id: string, index: number) => unwrap<StepDetail>(apiClient.get(`/runs/${id}/steps/${index}`)),
 };

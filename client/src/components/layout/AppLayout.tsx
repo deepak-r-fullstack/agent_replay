@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { KeyRound, LogOut, Menu, PlayCircle, X } from "lucide-react";
+import { History, KeyRound, LogOut, Menu, PlayCircle, X } from "lucide-react";
 import { useAuthStore } from "utils/store/authStore";
 import { ROLE_LABEL } from "utils/helper_functions/format";
 import { UserRole } from "utils/types";
@@ -12,8 +12,11 @@ interface NavItem {
   roles?: UserRole[];
 }
 
-// More screens (Runs, Tests) join this list in the next milestones.
-const NAV_ITEMS: NavItem[] = [{ to: "/apps", label: "Apps and keys", icon: KeyRound }];
+// More screens (Tests) join this list in the next milestones.
+const NAV_ITEMS: NavItem[] = [
+  { to: "/runs", label: "Runs", icon: History },
+  { to: "/apps", label: "Apps and keys", icon: KeyRound },
+];
 
 export const AppLayout = () => {
   const { user, signOut } = useAuthStore();

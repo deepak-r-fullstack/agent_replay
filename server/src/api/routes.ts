@@ -9,6 +9,7 @@ import { NotFoundError } from "../helpers/errors";
 import * as authController from "../controllers/auth.controller";
 import * as appsController from "../controllers/apps.controller";
 import * as ingestController from "../controllers/ingest.controller";
+import * as runsController from "../controllers/runs.controller";
 
 const router = Router();
 
@@ -52,6 +53,11 @@ router.post(
 );
 router.post("/apps/:id/rotate-key", authenticateUser, authorizeRoles("owner", "developer"), asyncHandler(appsController.rotateKey));
 router.post("/apps/:id/revoke-key", authenticateUser, authorizeRoles("owner", "developer"), asyncHandler(appsController.revokeKey));
+
+// ---------- people: runs and replay (everyone in the workspace may look) ----------
+router.get("/runs", authenticateUser, validateRequest(runsController.listRunsQuerySchema, "query"), asyncHandler(runsController.getRuns));
+router.get("/runs/:id", authenticateUser, asyncHandler(runsController.getRunDetail));
+router.get("/runs/:id/steps/:index", authenticateUser, asyncHandler(runsController.getStep));
 
 // ---------- apps: the SDK sends recorded runs here ----------
 router.post(
