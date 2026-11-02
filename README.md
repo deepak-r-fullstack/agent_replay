@@ -125,3 +125,9 @@ npm run build
 ## License
 
 MIT
+
+## Links from recorded apps
+
+A recording app can link to `/runs?externalId=<SDK run id>`. This filters exact recorded IDs inside the signed-in workspace and preserves the link through sign-in. It does not treat the SDK ID as a database run ID, expose runs across workspaces or grant access through a link. If the same ID exists in different apps, both rows remain visible with their app names; narrow the App filter to select one.
+
+An empty list can mean background ingestion has not arrived, the recording failed, or the signed-in workspace is different. The UI explains this and lets the visitor check again. A linked recording does not claim the original external action can be undone here; AgentGuard owns approvals and undo.

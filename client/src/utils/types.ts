@@ -82,6 +82,7 @@ export interface RunsPage {
 }
 
 export interface RunFilters {
+  externalId?: string;
   q?: string;
   status?: DisplayStatus;
   appId?: string;

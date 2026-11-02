@@ -417,3 +417,37 @@ describe("one step", () => {
     expect(res.body.message).toMatch(/not found/);
   });
 });
+
+describe("links to SDK recordings", () => {
+  it("finds the ingested recording by exact external id rather than the database id", async () => {
+    const team = await makeTeam("recorded-link");
+    await ingest(team, { runs: [{ id: "sdk-linked-run", name: "From AgentGuard", status: "ok" }], steps: [] });
+    const response = await listRuns(team, "?externalId=sdk-linked-run");
+    expect(response.status).toBe(200);
+    expect(names(response)).toEqual(["From AgentGuard"]);
+    expect(response.body.data.runs[0].id).not.toBe("sdk-linked-run");
+    expect((await listRuns(team, "?externalId=sdk-linked")).body.data.total).toBe(0);
+  });
+
+  it("never exposes a different workspace's matching recording", async () => {
+    const owner = await makeTeam("linked-owner");
+    const outsider = await makeTeam("linked-outsider");
+    await makeRun(owner, { externalId: "private-linked-id" });
+    expect((await listRuns(outsider, "?externalId=private-linked-id")).body.data.total).toBe(0);
+  });
+
+  it("keeps same-id recordings from different apps explicit and supports app filtering", async () => {
+    const team = await makeTeam("linked-apps");
+    const another = await request(app).post("/api/apps").set(authed(team.token)).send({ name: "Other app" });
+    await makeRun(team, { externalId: "same-sdk-id", name: "First app run" });
+    await makeRun({ ...team, appId: another.body.data.id }, { externalId: "same-sdk-id", name: "Second app run" });
+    expect((await listRuns(team, "?externalId=same-sdk-id")).body.data.total).toBe(2);
+    expect(names(await listRuns(team, "?externalId=same-sdk-id&appId=" + team.appId))).toEqual(["First app run"]);
+  });
+
+  it("an undelivered recording is empty and an oversized id is rejected", async () => {
+    const team = await makeTeam("linked-pending");
+    expect((await listRuns(team, "?externalId=not-delivered-yet")).body.data.total).toBe(0);
+    expect((await listRuns(team, "?externalId=" + "x".repeat(65))).status).toBe(400);
+  });
+});

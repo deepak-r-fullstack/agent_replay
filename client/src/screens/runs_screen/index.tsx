@@ -56,6 +56,7 @@ export const RunsScreen = () => {
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const filters: RunFilters = {
+    externalId: params.get("externalId") || undefined,
     q: params.get("q") || undefined,
     status: (params.get("status") as DisplayStatus | null) || undefined,
     appId: params.get("appId") || undefined,
@@ -105,6 +106,17 @@ export const RunsScreen = () => {
           </>
         }
       />
+
+      {filters.externalId && (
+        <section className="mb-4 rounded-lg border border-line bg-sheet p-4" aria-label="Linked recording">
+          <p className="font-semibold">Recording linked from your app</p>
+          <p className="mt-1 text-sm text-ink-soft">Only matching recordings in your signed-in workspace appear below. Background delivery may take a moment. If it stays empty, check the destination app, recording key and ingestion status; the public demo is a separate workspace.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <DisplayButton onClick={() => refetch()}>Check recording again</DisplayButton>
+            <DisplayButton onClick={() => change({ externalId: "" })}>Show all recordings</DisplayButton>
+          </div>
+        </section>
+      )}
 
       <section className="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-line bg-sheet p-4 lg:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_1fr]" aria-label="Filters">
         <div className="col-span-2 lg:col-span-1">
@@ -183,8 +195,8 @@ export const RunsScreen = () => {
 
       {data && data.total === 0 && hasFilters && (
         <DisplayEmptyState
-          title="No runs match these filters"
-          description="Try a different word, or widen the dates."
+          title={filters.externalId ? "This recording is not available here yet" : "No runs match these filters"}
+          description={filters.externalId ? "Delivery may still be pending, or the recording belongs to a different workspace. Use Check recording again above." : "Try a different word, or widen the dates."}
           action={
             <DisplayButton onClick={clearFilters} icon={<X className="h-4 w-4" aria-hidden />}>
               Clear filters
