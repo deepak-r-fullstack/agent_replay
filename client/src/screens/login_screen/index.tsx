@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { PlayCircle } from "lucide-react";
 import { DisplayButton, DisplayError } from "components/display_components";
 import { authService } from "utils/services/api_services/agentreplay_service";
@@ -12,6 +12,7 @@ type Mode = "signin" | "signup";
 export const LoginScreen = () => {
   const setSession = useAuthStore((state) => state.setSession);
   const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState<Mode>("signin");
   const [name, setName] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
@@ -26,7 +27,7 @@ export const LoginScreen = () => {
     try {
       const response = await request();
       setSession(response.data.token, response.data.user);
-      navigate("/runs", { replace: true });
+      navigate(location.pathname === "/" ? "/runs" : location.pathname + location.search, { replace: true });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

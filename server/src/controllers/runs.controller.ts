@@ -17,6 +17,7 @@ const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Dates look like 2026-1
 export const listRunsQuerySchema = z
   .object({
     status: optional(z.enum(DISPLAY_STATUSES)),
+    externalId: optional(z.string().trim().min(1).max(64)),
     appId: optional(z.string().regex(/^[a-f0-9]{24}$/i, "That app was not found.")),
     q: optional(z.string().trim().max(80)),
     from: optional(dateOnly),

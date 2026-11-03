@@ -30,6 +30,7 @@ export interface StepOutline {
 export const STEP_OUTLINE_PROJECTION = { _id: 0, index: 1, type: 1, name: 1, model: 1, tokens: 1, costUsd: 1, durationMs: 1, startedAt: 1, origin: { $ifNull: ["$origin", "recorded"] }, note: { $ifNull: ["$note", ""] }, failed: { $ne: ["$error", ""] } };
 
 export interface RunListFilters {
+  externalId?: string;
   status?: DisplayStatus;
   appId?: string;
   q?: string;
@@ -68,6 +69,7 @@ export function buildRunFilter(workspaceId: Types.ObjectId, filters: RunListFilt
   if (filters.status === "ok" || filters.status === "failed") conditions.push({ status: filters.status });
   if (filters.status === "running") conditions.push({ status: "running", $or: activeSince(cutoff) });
   if (filters.status === "unfinished") conditions.push({ status: "running", $or: quietSince(cutoff) });
+  if (filters.externalId) conditions.push({ externalId: filters.externalId });
   if (filters.appId) conditions.push({ appId: new Types.ObjectId(filters.appId) });
   if (filters.q) {
     // Typed text is searched as plain letters, never as a pattern.

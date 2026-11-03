@@ -32,6 +32,7 @@ const runSchema = new Schema(
 
 // The runs list and its filters.
 runSchema.index({ workspaceId: 1, startedAt: -1 });
+runSchema.index({ workspaceId: 1, externalId: 1 });
 runSchema.index({ workspaceId: 1, status: 1 });
 // The fork tree.
 runSchema.index({ parentRunId: 1 });
