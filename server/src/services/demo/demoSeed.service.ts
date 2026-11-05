@@ -20,6 +20,7 @@ import { claimJob } from "../maintenance/claimJob";
 import { syncWorkspaceStorage } from "../maintenance/storageTotals.service";
 import { createTest } from "../tests/tests.service";
 import { runSuite } from "../tests/suite.service";
+import { ensureAgentGuardDemoApp, keptLinkedRunsFilter } from "./agentGuardDemoApp.service";
 import { buildDemoStory, DEMO_TESTS, RIGHT_PROMPT, WRONG_RUN_ID, WRONG_STEP_INDEX } from "./demoStory";
 
 // Keeps the shared demo workspace tidy. Visitors can do anything in it (fork, save tests, add apps), so once an hour it is
@@ -42,18 +43,24 @@ export async function resetDemoWorkspace(now = new Date()) {
   const workspaceId = workspace._id as Types.ObjectId;
 
   // 1. Wipe what visitors made, and bring the counters down with it so the new story has room.
+  // Recordings from AgentGuard's guided demo (last day only) and their app stay, so nobody loses the recording they just made.
   const oldTotal = (await StorageUsage.findOne({ workspaceId, day: STORAGE_TOTAL_KEY }).lean())?.bytes ?? 0;
-  const runIds = (await Run.find({ workspaceId }).select("_id").lean()).map((run) => run._id);
+  const linkedAppIds = (await App.find({ workspaceId, linkedDemo: true }).select("_id").lean()).map((linked) => linked._id);
+  const wiped = { workspaceId, $nor: [keptLinkedRunsFilter(linkedAppIds, now)] };
+  const runIds = (await Run.find(wiped).select("_id").lean()).map((run) => run._id);
   await Step.deleteMany({ runId: { $in: runIds } });
-  await Run.deleteMany({ workspaceId });
+  await Run.deleteMany({ _id: { $in: runIds } });
   await TestResult.deleteMany({ workspaceId });
   await TestCase.deleteMany({ workspaceId });
-  await App.deleteMany({ workspaceId });
+  await App.deleteMany({ workspaceId, linkedDemo: { $ne: true } });
   await lowerStorage(workspaceId, oldTotal);
 
   // 2. The demo's own app. Nobody knows its key (it is never shown), so only the seed below sends runs to it.
   const { apiKeyHash, apiKeyPreview } = generateApiKey();
   const app = (await App.create({ workspaceId, name: DEMO_APP_NAME, apiKeyHash, apiKeyPreview, seeded: true })).toObject() as AppDoc;
+
+  // The linked app follows the AGENTGUARD_DEMO_SDK_KEY setting (switched off when it is not set).
+  await ensureAgentGuardDemoApp(workspaceId);
 
   // 3. The story: five recorded runs, one real fork that fixes the wrong refund, and two saved tests that have been run once.
   await ingestBatch(app, buildDemoStory(env.AGENTGUARD_DEMO_URL, now));

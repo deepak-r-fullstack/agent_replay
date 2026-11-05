@@ -47,6 +47,9 @@ export const LoginScreen = () => {
     setError("");
   };
 
+  // Someone opened a link to one recording (for example "View recording" in AgentGuard's guided demo). They land on it after signing in.
+  const openingRecording = new URLSearchParams(location.search).has("externalId") || /^\/runs\/[^/]+/.test(location.pathname);
+
   const canSubmit = mode === "signin" ? Boolean(email && password) : Boolean(name && workspaceName && email && password.length >= 8);
 
   return (
@@ -60,6 +63,13 @@ export const LoginScreen = () => {
         <p className="mt-2 text-ink-soft">
           AgentReplay records every step of an AI run, lets you replay it, try a fix from any step, and save a failure as a test.
         </p>
+
+        {openingRecording && (
+          <p className="mt-6 rounded-lg border border-brand/30 bg-brand-tint px-4 py-3 text-sm" role="note">
+            <span className="font-semibold">You are opening a recording.</span> If it came from AgentGuard's guided demo, press <span className="font-semibold">Try the demo</span>{" "}
+            and it opens straight away. For your own team's recordings, sign in as usual.
+          </p>
+        )}
 
         <section className="mt-8 rounded-lg border border-line bg-sheet p-5">
           <h2 className="text-base font-semibold">Just looking around?</h2>

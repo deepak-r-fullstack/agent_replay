@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, KeyRound, Search, X } from "lucide-react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { ChevronLeft, ChevronRight, KeyRound, Loader2, Search, X } from "lucide-react";
 import { DisplayBadge, DisplayButton, DisplayEmptyState, DisplayError, DisplayHelp, DisplayLoading, DisplayPageHeader, DisplayStatusBadge, DisplayTip } from "components/display_components";
 import { useApps, useRuns } from "utils/hooks/useAgentReplayQueries";
 import { useDebouncedValue } from "utils/hooks/useDebouncedValue";
@@ -51,10 +51,29 @@ const RunRow = ({ run, backTo }: { run: RunSummary; backTo: string }) => {
   );
 };
 
+// A linked recording is sent in the background, so it can take a few seconds to arrive. For this long the screen says
+// "on its way" and keeps checking (the list refreshes itself); after that it says the recording is not available here.
+const LINKED_RECORDING_WAIT_MS = 60_000;
+
+// How long this screen has been waiting for one linked recording. Starts again when the link changes.
+function useWaitingFor(externalId: string | undefined) {
+  const [startedAt, setStartedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    setStartedAt(Date.now());
+    setNow(Date.now());
+    if (!externalId) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [externalId]);
+  return now - startedAt;
+}
+
 // Every run your apps have recorded. The filters and page are kept in the address, so "back" from a run returns here as you left it.
 export const RunsScreen = () => {
   const [params, setParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const filters: RunFilters = {
     externalId: params.get("externalId") || undefined,
     q: params.get("q") || undefined,
@@ -88,8 +107,18 @@ export const RunsScreen = () => {
     setParams(new URLSearchParams(), { replace: true });
   };
 
-  const { data, isLoading, error, refetch } = useRuns(filters, page);
+  const { data, isLoading, isPlaceholderData, error, refetch } = useRuns(filters, page);
   const { data: apps } = useApps();
+  const waitedMs = useWaitingFor(filters.externalId);
+  // Only answers for THIS link count (the list keeps the previous answer on screen while the next one loads).
+  const linkedAnswer = filters.externalId && data && !isPlaceholderData ? data : null;
+  const linkedRun = linkedAnswer && linkedAnswer.total === 1 && !filters.q && !filters.status && !filters.appId && !filters.from && !filters.to ? linkedAnswer.runs[0] : null;
+  const linkedState = !filters.externalId ? null : linkedRun ? "available" : linkedAnswer && linkedAnswer.total === 0 ? (waitedMs < LINKED_RECORDING_WAIT_MS ? "pending" : "unavailable") : null;
+
+  // A link to exactly one recording opens it straight away. "All runs" on that screen comes back to this filtered list.
+  useEffect(() => {
+    if (linkedRun) navigate(`/runs/${linkedRun.id}`, { replace: true, state: { backTo: `/runs${location.search}` } });
+  }, [linkedRun, navigate, location.search]);
   const backTo = `/runs${location.search}`;
   const lastPage = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   const firstShown = data && data.total > 0 ? (data.page - 1) * data.pageSize + 1 : 0;
@@ -108,9 +137,32 @@ export const RunsScreen = () => {
       />
 
       {filters.externalId && (
-        <section className="mb-4 rounded-lg border border-line bg-sheet p-4" aria-label="Linked recording">
-          <p className="font-semibold">Recording linked from your app</p>
-          <p className="mt-1 text-sm text-ink-soft">Only matching recordings in your signed-in workspace appear below. Background delivery may take a moment. If it stays empty, check the destination app, recording key and ingestion status; the public demo is a separate workspace.</p>
+        <section className="mb-4 rounded-lg border border-line bg-sheet p-4" aria-label="Linked recording" aria-live="polite">
+          {linkedState === "pending" && (
+            <>
+              <p className="flex items-center gap-2 font-semibold" role="status">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Your recording is on its way
+              </p>
+              <p className="mt-1 text-sm text-ink-soft">It is sent in the background, so it can take a few seconds. This page checks again by itself and opens it as soon as it arrives.</p>
+            </>
+          )}
+          {linkedState === "unavailable" && (
+            <>
+              <p className="font-semibold" role="status">
+                This recording is not available here
+              </p>
+              <p className="mt-1 text-sm text-ink-soft">
+                It has not arrived in the workspace you are signed in to. Recording may have failed, or it was saved to a different workspace. Nothing else was
+                changed: the action itself is still in the app that made it.
+              </p>
+            </>
+          )}
+          {linkedState !== "pending" && linkedState !== "unavailable" && (
+            <>
+              <p className="font-semibold">Recording linked from your app</p>
+              <p className="mt-1 text-sm text-ink-soft">Only recordings with exactly this id, in your signed-in workspace, appear below.</p>
+            </>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             <DisplayButton onClick={() => refetch()}>Check recording again</DisplayButton>
             <DisplayButton onClick={() => change({ externalId: "" })}>Show all recordings</DisplayButton>
@@ -193,10 +245,10 @@ export const RunsScreen = () => {
         />
       )}
 
-      {data && data.total === 0 && hasFilters && (
+      {data && data.total === 0 && hasFilters && !filters.externalId && (
         <DisplayEmptyState
-          title={filters.externalId ? "This recording is not available here yet" : "No runs match these filters"}
-          description={filters.externalId ? "Delivery may still be pending, or the recording belongs to a different workspace. Use Check recording again above." : "Try a different word, or widen the dates."}
+          title="No runs match these filters"
+          description="Try a different word, or widen the dates."
           action={
             <DisplayButton onClick={clearFilters} icon={<X className="h-4 w-4" aria-hidden />}>
               Clear filters

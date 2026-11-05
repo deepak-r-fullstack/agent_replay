@@ -30,6 +30,16 @@ const ingestAppLimiter = rateLimit({
   message: { success: false, message: "This app is sending too fast. Please slow down and try again in a minute." },
 });
 
+// Checking whether a recording arrived has its own allowance, so checks never use up the room for sending runs.
+const lookupAppLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: isTest ? 100000 : 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (_req, res) => String(res.locals.app?._id),
+  message: { success: false, message: "This app is checking very often. Please slow down and try again in a minute." },
+});
+
 // Forks ask the AI model, which can cost money, so each workspace may only start a few per minute.
 const forkLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -112,6 +122,15 @@ router.post(
   ingestAppLimiter,
   validateRequest(ingestController.ingestBatchSchema),
   asyncHandler(ingestController.receiveBatch)
+);
+// An app asks whether one of its own runs has arrived (and links to a given AgentGuard action). Never returns run text.
+router.get(
+  "/ingest/runs/:externalId",
+  ingestAddressLimiter,
+  authenticateApp,
+  lookupAppLimiter,
+  validateRequest(ingestController.recordedRunQuerySchema, "query"),
+  asyncHandler(ingestController.getRecordedRun)
 );
 
 export default router;

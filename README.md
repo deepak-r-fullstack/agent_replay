@@ -128,6 +128,23 @@ MIT
 
 ## Links from recorded apps
 
-A recording app can link to `/runs?externalId=<SDK run id>`. This filters exact recorded IDs inside the signed-in workspace and preserves the link through sign-in. It does not treat the SDK ID as a database run ID, expose runs across workspaces or grant access through a link. If the same ID exists in different apps, both rows remain visible with their app names; narrow the App filter to select one.
+A recording app can link to `/runs?externalId=<SDK run id>`. This finds exact recorded ids inside the signed-in workspace only, and the link survives sign-in. It does not treat the SDK id as a database run id, does not show runs across workspaces, and does not grant access through a link.
 
-An empty list can mean background ingestion has not arrived, the recording failed, or the signed-in workspace is different. The UI explains this and lets the visitor check again. A linked recording does not claim the original external action can be undone here; AgentGuard owns approvals and undo.
+- **Exactly one match opens the run straight away.** "All runs" on that screen returns to the filtered list. If the same id exists in several apps, the list stays, with each app's name.
+- **No match yet: "Your recording is on its way".** For up to a minute the page checks again by itself (background delivery can take a few seconds). After that it says the recording is not available in this workspace. It never shows a different recording in its place.
+- **Signed out:** the sign-in screen says a recording is being opened, and that recordings from AgentGuard's guided demo open with **Try the demo**.
+- **A run whose steps link to AgentGuard** shows a banner at the top: AgentReplay cannot change or undo anything, and "Open this action in AgentGuard" goes back to the action. Undo stays in AgentGuard.
+
+### Checking that a recording arrived (for the recording app)
+
+`GET /api/ingest/runs/:externalId?ref=<AgentGuard action id>`, with the app's SDK key in `x-api-key`, answers `{ externalId, status, stepCount, linked }`, or 404. Only the app's **own** runs are found; another app's run with the same id is "not found". `linked` is true only when a step links to that AgentGuard action. No recorded text is returned. It has its own rate limit (300 a minute per app), separate from sending.
+
+### AgentGuard's guided demo
+
+Optional: set `AGENTGUARD_DEMO_SDK_KEY` (`ar_` + 48 hex characters, secret) to the same value as AgentGuard's `AGENTREPLAY_API_KEY`. The demo workspace then keeps an **AgentGuard guided demo** app with that key:
+
+- its key cannot be rotated or revoked by visitors;
+- its recordings from the last 24 hours survive the hourly demo reset (forks of them, and everything visitors add, do not);
+- it is checked at start-up and at every reset; removing the setting switches the old key off.
+
+So a visitor who presses "View recording" in AgentGuard and then **Try the demo** sees their own booking's journey. These recordings are practice data in the shared demo, so every demo visitor can see them, and they count towards the demo's 5 MB a day storage limit.

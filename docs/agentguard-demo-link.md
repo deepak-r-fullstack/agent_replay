@@ -1,3 +1,7 @@
+> **Two different links.** This page is about the fixed sample action in the refund story. The **guided booking demo**
+> links each visitor's own recording to their own AgentGuard action (no fixed id): see "AgentGuard's guided demo" in the
+> README.
+
 # Linking the AgentReplay demo to AgentGuard's demo
 
 In AgentReplay's demo, the wrong refund step has a link: **Open in AgentGuard to undo**. It opens
