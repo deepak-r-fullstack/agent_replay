@@ -31,6 +31,10 @@ services:
         value: "true"
       - key: AGENTGUARD_DEMO_URL
         value: https://agentguard.sritaraksolutions.in
+      # Optional. The SDK key AgentGuard's guided demo records with (the same value as AgentGuard's AGENTREPLAY_API_KEY).
+      # Leave empty to keep the link off. Secret: type it in Render, never in this file.
+      - key: AGENTGUARD_DEMO_SDK_KEY
+        sync: false
       # AI settings. "demo" is the free scripted model: it needs no key and costs nothing.
       # The demo workspace always uses it, even if you switch the provider later.
       - key: LLM_PROVIDER

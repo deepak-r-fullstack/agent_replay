@@ -12,6 +12,8 @@ const appSchema = new Schema(
     active: { type: Boolean, default: true },
     // Made by the demo seed. Its key cannot be revoked or rotated, and it does not use up a visitor's app slots.
     seeded: { type: Boolean, default: false },
+    // The app AgentGuard's guided demo records into. It is kept (with its recent runs) when the demo starts again.
+    linkedDemo: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

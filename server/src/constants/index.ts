@@ -28,6 +28,10 @@ export const DEMO_APP_NAME = "Acme Support bot";
 // It must not be a long run of digits: those look like a card number, and the secret-hiding would blank them.
 export const AGENTGUARD_DEMO_ACTION_ID = "65a1c2e4f0b8d7a9136e1041";
 export const DEMO_USER_NAME = "Demo Visitor";
+// The app AgentGuard's guided demo records into (only when AGENTGUARD_DEMO_SDK_KEY is set). Its key cannot be changed by
+// visitors, and its recordings survive the hourly reset for a day, so a visitor never loses the recording they just made.
+export const AGENTGUARD_DEMO_APP_NAME = "AgentGuard guided demo";
+export const LINKED_DEMO_RUN_KEEP_MS = 24 * 60 * 60 * 1000;
 
 // ---------- recording runs ----------
 

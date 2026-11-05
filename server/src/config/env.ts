@@ -40,6 +40,15 @@ const envSchema = z.object({
   LLM_BASE_URL: z.string().optional().default(""),
   // Where AgentGuard's public demo lives. The wrong refund in AgentReplay's demo links to the matching action there.
   AGENTGUARD_DEMO_URL: z.string().default("https://agentguard.sritaraksolutions.in"),
+  // Optional. The SDK key AgentGuard's guided demo records with (the same value as AgentGuard's AGENTREPLAY_API_KEY).
+  // When set, the demo workspace keeps an "AgentGuard guided demo" app with this key, so a visitor who presses
+  // "Try the demo" can open the recording of their own booking. Secret: set it in the host's settings, never in a file.
+  AGENTGUARD_DEMO_SDK_KEY: z
+    .string()
+    .trim()
+    .optional()
+    .default("")
+    .refine((value) => value === "" || /^ar_[0-9a-f]{48}$/.test(value), "AGENTGUARD_DEMO_SDK_KEY must look like ar_ followed by 48 letters 0-9 and a-f."),
   // Demo mode turns on the "Try the demo" sign-in.
   DEMO_MODE: z
     .enum(["true", "false"])

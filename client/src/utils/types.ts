@@ -109,6 +109,8 @@ export interface StepOutline {
 export interface RunDetail {
   run: RunSummary & { parentRunName: string | null };
   steps: StepOutline[];
+  // The AgentGuard actions this run's steps link to, once each (older servers leave it out).
+  links?: ExternalRef[];
 }
 
 export interface StepDetail extends Omit<StepOutline, "failed"> {

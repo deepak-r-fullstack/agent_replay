@@ -1,6 +1,6 @@
 import { FilterQuery, Types } from "mongoose";
 import { isProduction } from "../../config/env";
-import { DisplayStatus, UNFINISHED_AFTER_MS } from "../../constants";
+import { AGENTGUARD_SYSTEM, DisplayStatus, UNFINISHED_AFTER_MS } from "../../constants";
 import { App } from "../../models/app.model";
 import { Run, RunDoc } from "../../models/run.model";
 import { Step } from "../../models/step.model";
@@ -126,13 +126,27 @@ export async function listRuns(workspaceId: Types.ObjectId, filters: RunListFilt
   return { runs: runs.map((run) => toRunSummary(run, appNames, now)), total, page, pageSize };
 }
 
+// The AgentGuard actions this run's steps link to, once each and in step order, so the replay screen can say
+// "undo this in AgentGuard" without opening every step. Links are checked again here, whatever was saved before.
+const MAX_RUN_LINKS = 5;
+function linkedRecordsOf(steps: Array<{ externalRef?: { system?: string | null; id?: string | null; url?: string | null } | null }>) {
+  const links: Array<{ system: string; id: string; url: string }> = [];
+  for (const { externalRef } of steps) {
+    if (!externalRef?.system || !externalRef.id || !externalRef.url || !isAllowedLinkUrl(externalRef.url, isProduction)) continue;
+    if (links.some((link) => link.system === externalRef.system && link.id === externalRef.id)) continue;
+    links.push({ system: externalRef.system, id: externalRef.id, url: externalRef.url });
+    if (links.length >= MAX_RUN_LINKS) break;
+  }
+  return links;
+}
+
 // Returns null when the run is not found in this workspace (also for another team's run).
 export async function getRunWithSteps(workspaceId: Types.ObjectId, runId: string) {
   const now = new Date();
   const run = await Run.findOne({ _id: runId, workspaceId }).lean<LeanRun>();
   if (!run) return null;
 
-  const [steps, appNames, parent] = await Promise.all([
+  const [steps, appNames, parent, linkedSteps] = await Promise.all([
     // The timeline only needs the outline of each step. The text (up to 64 KB per step) is fetched one step at a time.
     Step.aggregate<StepOutline>([
       { $match: { runId: run._id } },
@@ -141,11 +155,13 @@ export async function getRunWithSteps(workspaceId: Types.ObjectId, runId: string
     ]),
     appNamesOf(workspaceId),
     run.parentRunId ? Run.findOne({ _id: run.parentRunId, workspaceId }).select("name").lean() : null,
+    Step.find({ runId: run._id, "externalRef.system": AGENTGUARD_SYSTEM }).sort({ index: 1 }).select("externalRef").limit(MAX_RUN_LINKS * 10).lean(),
   ]);
 
   return {
     run: { ...toRunSummary(run, appNames, now), parentRunName: parent?.name ?? null },
     steps,
+    links: linkedRecordsOf(linkedSteps),
   };
 }
 

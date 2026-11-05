@@ -73,7 +73,9 @@ export function safeLink(url: string): string | null {
   try {
     const parsed = new URL(url);
     if (parsed.username || parsed.password) return null;
-    const ok = parsed.protocol === "https:" || (import.meta.env.DEV && parsed.protocol === "http:" && parsed.hostname === "localhost");
+    // http:// only for localhost, and only while AgentReplay itself runs on this computer (development or a local check).
+    const local = import.meta.env.DEV || window.location.hostname === "localhost";
+    const ok = parsed.protocol === "https:" || (local && parsed.protocol === "http:" && parsed.hostname === "localhost");
     return ok ? parsed.toString() : null;
   } catch {
     return null;

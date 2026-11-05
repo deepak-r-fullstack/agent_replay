@@ -3,6 +3,7 @@ import { env } from "./config/env";
 import { createApp } from "./app";
 import { connectToDatabase, disconnectFromDatabase } from "./loaders/database";
 import { startMaintenance } from "./loaders/maintenance";
+import { ensureAgentGuardDemoApp } from "./services/demo/agentGuardDemoApp.service";
 import { logger, serializeError } from "./utils/logger";
 
 // Unhandled rejections and uncaught exceptions: log, then exit so the platform
@@ -19,6 +20,8 @@ process.on("uncaughtException", (err) => {
 async function startServer() {
   try {
     await connectToDatabase();
+    // AgentGuard's guided demo can record as soon as the server is up, not only after the next demo reset. Never throws.
+    await ensureAgentGuardDemoApp();
 
     startMaintenance();
     const app = createApp();

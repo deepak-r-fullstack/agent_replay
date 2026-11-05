@@ -1,10 +1,10 @@
 import { KeyboardEvent, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Bot, CircleDot, GitCompare, GitFork, Hourglass, Search, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, CircleDot, ExternalLink, GitCompare, GitFork, Hourglass, Search, ShieldCheck, Wrench } from "lucide-react";
 import { DisplayButton, DisplayError, DisplayLoading, DisplayStatusBadge, DisplayTip } from "components/display_components";
 import { useRun } from "utils/hooks/useAgentReplayQueries";
 import { getErrorMessage } from "utils/services/api_services/apiClient";
-import { formatCost, formatDuration, formatTokens, plural, STEP_ORIGIN_META, STEP_TYPE_META, timeAgo } from "utils/helper_functions/format";
+import { formatCost, formatDuration, formatTokens, plural, safeLink, STEP_ORIGIN_META, STEP_TYPE_META, timeAgo } from "utils/helper_functions/format";
 import { useAuthStore } from "utils/store/authStore";
 import { StepOutline, StepType } from "utils/types";
 import { SaveAsTestDialog } from "screens/tests_screen/SaveAsTestDialog";
@@ -93,6 +93,8 @@ export const RunReplayScreen = () => {
   }
 
   const { run, steps } = data;
+  // The AgentGuard actions this run caused (only links that are safe to open).
+  const agentGuardLinks = (data.links || []).filter((link) => link.system === "agentguard" && safeLink(link.url));
   const failedSteps = steps.filter((step) => step.failed);
   // Open on the first failed step if there is one, so the problem is the first thing you see.
   const selected = chosen !== null && steps.some((step) => step.index === chosen) ? chosen : (failedSteps[0] ?? steps[0])?.index ?? null;
@@ -162,6 +164,31 @@ export const RunReplayScreen = () => {
             </Link>
           )}
         </p>
+      )}
+
+      {agentGuardLinks.length > 0 && !run.parentRunId && (
+        <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand/30 bg-brand-tint px-4 py-3" aria-label="Linked AgentGuard action">
+          <p className="flex min-w-0 items-start gap-2 text-sm">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
+            <span>
+              <span className="font-semibold">This recording comes from AgentGuard.</span> It shows what happened, step by step. AgentReplay cannot change or undo
+              anything; the action itself, and its Undo, live in AgentGuard.
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {agentGuardLinks.map((link) => (
+              <a
+                key={link.id}
+                href={safeLink(link.url) as string}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md border border-brand bg-sheet px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint"
+              >
+                {agentGuardLinks.length > 1 ? `Open action ${link.id.slice(-6)} in AgentGuard` : "Open this action in AgentGuard"} <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              </a>
+            ))}
+          </div>
+        </section>
       )}
 
       {failedSteps.length > 0 && (
